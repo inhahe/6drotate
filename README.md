@@ -16,6 +16,8 @@ Because time is now an axis, a rotation that touches T only reveals itself when
 you **play** the clip: the app sweeps a thin "time slab" through the rotated 6D
 volume, so you literally watch time pass through the rotation.
 
+**[Live demo →](https://inhahe.com/6d-video-rotator.html)**
+
 Open `6d-video-rotator.html` locally in a browser. No build step, no
 dependencies.
 
