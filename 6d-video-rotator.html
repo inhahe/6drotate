@@ -1,0 +1,3972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6D Video Rotator</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0d1117; color: #c9d1d9;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  display: flex; height: 100vh; height: 100dvh; overflow: hidden;
+}
+
+/* ── Sidebar ───────────────────────────────────────────── */
+.sidebar {
+  width: 340px; min-width: 340px;
+  padding: 16px 18px; overflow-y: auto;
+  border-right: 1px solid #21262d;
+  background: #0d1117;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+.sidebar h1 {
+  font-size: 20px; font-weight: 700; letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #58a6ff, #d2a8ff, #ff7b72);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.sidebar h1 span { font-size: 12px; font-weight: 400; opacity: 0.6;
+  -webkit-text-fill-color: #8b949e; display: block; margin-top: 2px; }
+
+/* ── Sections ──────────────────────────────────────────── */
+.section { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 12px 14px; }
+.section-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.8px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
+}
+.section-title .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* ── Drop zone ─────────────────────────────────────────── */
+.drop-zone {
+  border: 2px dashed #30363d; border-radius: 8px;
+  padding: 20px; text-align: center; cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.drop-zone:hover, .drop-zone.dragover {
+  border-color: #58a6ff; background: rgba(88,166,255,0.06);
+}
+.drop-zone p { font-size: 13px; color: #8b949e; }
+.drop-zone p strong { color: #58a6ff; }
+.drop-zone input { display: none; }
+.image-info { font-size: 11px; color: #8b949e; margin-top: 8px; }
+.image-info span { color: #58a6ff; font-weight: 600; }
+
+/* ── Slider rows ───────────────────────────────────────── */
+.slider-row {
+  display: grid; grid-template-columns: 72px 1fr 42px;
+  align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.slider-row label {
+  font-size: 12px; font-weight: 600; font-family: 'Consolas', 'SF Mono', monospace;
+}
+.slider-row .val {
+  font-size: 11px; color: #8b949e; text-align: right;
+  font-family: 'Consolas', 'SF Mono', monospace;
+}
+/* Frames readout turns amber in "All frames" mode */
+#framesVal.frames-all { color: #d29922; font-weight: 600; }
+
+/* Checkbox rows (e.g. "All frames") — align under the slider column */
+.check-row {
+  display: flex; align-items: center; gap: 6px;
+  margin: -2px 0 8px 80px;   /* 72px label + 8px gap = under the slider */
+}
+.check-row input[type="checkbox"] {
+  width: 13px; height: 13px; margin: 0; cursor: pointer; accent-color: #d29922;
+}
+.check-row label {
+  font-size: 11px; color: #8b949e; cursor: pointer;
+  font-family: 'Consolas', 'SF Mono', monospace;
+}
+.check-row input:checked + label { color: #d29922; font-weight: 600; }
+
+/* Live memory estimate row */
+.mem-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin: 0 0 8px 0;
+  font-size: 11px; font-family: 'Consolas', 'SF Mono', monospace;
+}
+.mem-row .mem-label { color: #8b949e; font-weight: 600; }
+.mem-row .mem-val {
+  color: #58a6ff; cursor: pointer; text-align: right;
+  text-decoration: underline dotted; text-underline-offset: 2px;
+}
+.mem-row .mem-val:hover { color: #79c0ff; }
+/* Red = won't fit in RAM (previously OOM'd — a hard allocation failure). */
+.mem-row .mem-val.mem-warn { color: #f85149; }
+
+/* ── Range inputs ──────────────────────────────────────── */
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 6px; border-radius: 3px;
+  background: #21262d; outline: none; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #c9d1d9; border: 2px solid #0d1117;
+  box-shadow: 0 0 0 1px #30363d;
+  transition: background 0.15s;
+}
+input[type="range"]::-webkit-slider-thumb:hover { background: #f0f6fc; }
+input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #c9d1d9; border: 2px solid #0d1117;
+  box-shadow: 0 0 0 1px #30363d;
+}
+
+/* Colored thumbs for rotation sliders */
+.group-rotations input[type="range"]::-webkit-slider-thumb { background: #d2a8ff; }
+.group-rotations input[type="range"]::-moz-range-thumb { background: #d2a8ff; }
+
+.group-settings input[type="range"]::-webkit-slider-thumb { background: #8b949e; }
+.group-settings input[type="range"]::-moz-range-thumb { background: #8b949e; }
+
+/* Time-touching rotation sliders get a time-colored thumb */
+.group-rotations input.has-time::-webkit-slider-thumb { background: #f0b429; }
+.group-rotations input.has-time::-moz-range-thumb { background: #f0b429; }
+
+/* Playback scrubber thumb */
+#timeScrub::-webkit-slider-thumb { background: #f0b429; }
+#timeScrub::-moz-range-thumb { background: #f0b429; }
+
+/* ── Dim label colors ──────────────────────────────────── */
+.dim-x { color: #58a6ff; }
+.dim-y { color: #79c0ff; }
+.dim-t { color: #f0b429; }
+.dim-r { color: #ff7b72; }
+.dim-g { color: #7ee787; }
+.dim-b { color: #7dc8f7; }
+.dim-h { color: #f0883e; }
+.dim-s { color: #a5d6ff; }
+.dim-v { color: #f9e2af; }
+.dim-l { color: #c9d1d9; }
+.sep   { color: #484f58; }
+
+/* labels with an explanatory tooltip */
+label.has-tip {
+  cursor: help;
+  text-decoration: underline dotted rgba(139, 148, 158, 0.6);
+  text-underline-offset: 3px;
+}
+
+/* ── Buttons ───────────────────────────────────────────── */
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn {
+  flex: 1; min-width: 80px; padding: 7px 12px;
+  border: 1px solid #30363d; border-radius: 6px;
+  background: #21262d; color: #c9d1d9;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: center;
+}
+.btn:hover { background: #30363d; border-color: #484f58; }
+.btn.active { background: #1f6feb; border-color: #388bfd; color: #fff; }
+.btn.play.active { background: #238636; border-color: #2ea043; }
+
+/* ── Toggle button rows (clip mode, color space) ─────── */
+.toggle-row {
+  display: flex; align-items: center; gap: 8px; margin-top: 6px;
+}
+.toggle-row label { font-size: 12px; font-weight: 600; white-space: nowrap; min-width: 72px; }
+.toggle-options { display: flex; gap: 0; flex: 1; }
+.toggle-btn {
+  flex: 1; padding: 4px 0; border: 1px solid #30363d;
+  background: #0d1117; color: #8b949e;
+  font-size: 11px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.toggle-btn:first-child { border-radius: 4px 0 0 4px; }
+.toggle-btn:last-child  { border-radius: 0 4px 4px 0; }
+.toggle-btn:not(:first-child) { border-left: none; }
+.toggle-btn:hover { background: #161b22; color: #c9d1d9; }
+.toggle-btn.active { background: #21262d; color: #f0f6fc; border-color: #484f58; }
+.toggle-btn.active[data-mode="0"] { color: #ff00ff; }
+.toggle-btn.active[data-mode="1"] { color: #f0f6fc; }
+
+/* ── Footer info ───────────────────────────────────────── */
+.info-bar {
+  font-size: 11px; color: #484f58; display: flex;
+  justify-content: space-between; padding-top: 8px;
+  border-top: 1px solid #21262d;
+}
+.info-bar span { font-family: 'Consolas', 'SF Mono', monospace; }
+.clip-pct { color: #ff00ff !important; transition: color 0.3s; }
+.clip-pct.zero { color: #484f58 !important; }
+/* Renderer indicator — neutral status (not a warning): cyan when the live view
+   is running on the GPU, muted grey when on the CPU. */
+#infoRenderer { color: #484f58; }
+#infoRenderer.gpu { color: #39c5cf; }
+
+/* ── Main canvas area ──────────────────────────────────── */
+.main {
+  flex: 1; display: flex; align-items: center;
+  justify-content: center; position: relative;
+  background: #010409;
+}
+canvas {
+  display: block; image-rendering: pixelated;
+  touch-action: none;
+}
+/* WebGPU renders the point cloud on #gpuCanvas (bottom); the 2D #canvas stays on
+   top for overlays (and for the whole cloud in the CPU-fallback path). */
+#gpuCanvas { position: absolute; inset: 0; z-index: 0; display: none; }
+#canvas    { position: absolute; inset: 0; z-index: 1; }
+/* Dashed frame-bounds outline for GPU mode, as a DOM element rather than a 2D
+   canvas: a second (transparent) canvas stacked over the WebGPU canvas makes
+   Chrome's compositor intermittently drop the WebGPU layer (blob vanishes while
+   this outline stays). Keeping the outline in the DOM lets us hide #canvas
+   entirely in GPU mode so only the WebGPU canvas is composited. */
+#gpuFrameBounds {
+  position: absolute; z-index: 2; display: none; box-sizing: border-box;
+  pointer-events: none; border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+.canvas-hint, .time-readout, .loading-overlay { z-index: 3; }
+.canvas-hint {
+  position: absolute; bottom: 16px; right: 20px;
+  font-size: 11px; color: #30363d;
+  font-family: 'Consolas', 'SF Mono', monospace;
+}
+.time-readout {
+  position: absolute; top: 14px; left: 18px;
+  font-size: 12px; color: #f0b429;
+  font-family: 'Consolas', 'SF Mono', monospace;
+  background: rgba(1,4,9,0.55); padding: 3px 8px; border-radius: 5px;
+  pointer-events: none;
+}
+.loading-overlay {
+  position: absolute; inset: 0; display: none;
+  align-items: center; justify-content: center;
+  background: rgba(1,4,9,0.7); color: #c9d1d9;
+  font-size: 14px; font-family: 'Consolas', 'SF Mono', monospace;
+}
+.loading-overlay.show { display: flex; }
+
+/* Mobile "view entire configuration" toggle — hidden on desktop. */
+#viewToggle {
+  display: none;
+  position: fixed; z-index: 50;
+  right: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+  padding: 9px 14px; border-radius: 999px;
+  background: #1f6feb; color: #fff; border: 1px solid #388bfd;
+  font-size: 13px; font-weight: 600; box-shadow: 0 3px 12px #000a;
+  cursor: pointer;
+}
+
+/* Mobile "open / replace video" pill — hidden on desktop, shown while a
+   clip is loaded (image view) so the file picker is always one tap away. */
+#openVideoBtn {
+  display: none;
+  position: fixed; z-index: 50;
+  left: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+  padding: 9px 14px; border-radius: 999px;
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+  font-size: 13px; font-weight: 600; box-shadow: 0 3px 12px #000a;
+  cursor: pointer;
+}
+
+/* ── Mobile / narrow-screen layout ─────────────────────── */
+@media (max-width: 768px) {
+  body { flex-direction: column; }
+  .sidebar {
+    order: 0;
+    width: 100%; min-width: 0;
+    flex: 1 1 auto;
+    border-right: none;
+    padding: 12px 14px calc(14px + env(safe-area-inset-bottom));
+    gap: 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sidebar h1 { font-size: 18px; }
+  .main {
+    order: 1;
+    flex: 0 0 auto;
+    width: 100%;
+    height: 44vh; min-height: 200px;
+    border-top: 1px solid #21262d;
+  }
+  .canvas-hint { bottom: 10px; right: 12px; }
+  #viewToggle { display: block; }
+  body.mv-image #openVideoBtn { display: block; }
+
+  body.mv-config #groupRotations,
+  body.mv-config #groupPlayback,
+  body.mv-config .main { display: none; }
+
+  body.mv-image .sidebar > :not(#groupRotations):not(#groupPlayback) { display: none; }
+  body.mv-image .sidebar { padding-bottom: 8px; }
+  body.mv-image #groupRotations { margin-bottom: 4px; }
+
+  input[type="range"] { height: 22px; background: transparent; }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px; border-radius: 3px; background: #21262d;
+  }
+  input[type="range"]::-moz-range-track {
+    height: 6px; border-radius: 3px; background: #21262d;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    width: 24px; height: 24px; margin-top: -9px;
+  }
+  input[type="range"]::-moz-range-thumb { width: 24px; height: 24px; }
+  .slider-row { grid-template-columns: 64px 1fr 40px; margin-bottom: 10px; }
+  .toggle-btn { padding: 9px 0; font-size: 12px; }
+  .btn { padding: 11px 12px; font-size: 13px; }
+  .load-modal-box { max-width: none; }
+}
+
+/* ── Pre-load resolution/frames selection modal ─────────── */
+.load-modal {
+  position: fixed; inset: 0; z-index: 100; display: none;
+  align-items: center; justify-content: center;
+  background: rgba(1,4,9,0.80); padding: 20px;
+}
+.load-modal.show { display: flex; }
+.load-modal-box {
+  width: 100%; max-width: 380px; box-sizing: border-box;
+  background: #0d1117; border: 1px solid #30363d; border-radius: 10px;
+  padding: 20px; box-shadow: 0 8px 40px #000c;
+  font-family: 'Consolas', 'SF Mono', monospace;
+}
+.load-modal-box h2 { font-size: 16px; color: #f0f6fc; margin: 0 0 4px; }
+.load-native { font-size: 12px; color: #8b949e; margin-bottom: 16px; }
+.load-field { margin-bottom: 14px; }
+.load-field > label { display: block; font-size: 12px; color: #c9d1d9; margin-bottom: 6px; }
+.load-input-row { display: grid; grid-template-columns: 1fr 78px; gap: 10px; align-items: center; }
+.load-input-row input[type="number"] {
+  width: 100%; padding: 5px 8px; box-sizing: border-box;
+  background: #161b22; border: 1px solid #30363d; border-radius: 5px;
+  color: #f0f6fc; font-size: 13px; font-family: inherit; text-align: right;
+}
+.load-mem { font-size: 12px; color: #8b949e; margin: 4px 0 18px; }
+.load-mem span {
+  color: #c9d1d9; font-weight: 600; cursor: pointer;
+  text-decoration: underline dotted; text-underline-offset: 2px;
+}
+.load-mem span:hover { color: #79c0ff; }
+.load-mem.warn span { color: #f85149; }
+.load-modal-actions { display: flex; gap: 10px; }
+.load-modal-actions .btn { padding: 9px 12px; font-size: 13px; }
+.btn.btn-primary { background: #1f6feb; border-color: #388bfd; color: #fff; }
+.btn.btn-primary:hover { background: #388bfd; border-color: #58a6ff; }
+</style>
+</head>
+
+<body>
+
+<aside class="sidebar">
+  <h1>6D Video Rotator
+    <span id="subtitle">every pixel is a 6D voxel: (x, y, t, R, G, B)</span>
+  </h1>
+
+  <!-- Video loader -->
+  <div class="section">
+    <div class="drop-zone" id="dropZone">
+      <p><strong>Drop video or GIF here</strong> or click to browse</p>
+      <p style="margin-top:4px; font-size:11px;">MP4, WebM, MOV, animated GIF</p>
+      <input type="file" id="fileInput" accept="video/*,image/gif">
+    </div>
+    <div class="image-info" id="imageInfo"></div>
+  </div>
+
+  <!-- Settings -->
+  <div class="section group-settings">
+    <div class="section-title"><span class="dot" style="background:#8b949e"></span> Settings</div>
+    <div class="slider-row">
+      <label class="has-tip" title="Multiplier on the auto-computed splat (dot) size. 1.0 makes pixels tile seamlessly; higher = bigger, overlapping dots, lower = sparse pinpoints.">Dot scale</label>
+      <input type="range" id="dotScale" min="0.3" max="3" value="1" step="0.05">
+      <span class="val" id="dotScaleVal">1.0</span>
+    </div>
+    <div class="slider-row">
+      <label>Zoom</label>
+      <input type="range" id="zoom" min="0.2" max="4" value="1" step="0.05">
+      <span class="val" id="zoomVal">1.0</span>
+    </div>
+    <div class="slider-row">
+      <label class="has-tip" title="Working resolution: the long side (in pixels) the clip is downsampled to before every pixel becomes a 6D point. Higher = sharper and more detail, but the transform and splatting get slower (cost grows with the square). Capped at the source's native size. Takes effect on release.">Resolution</label>
+      <input type="range" id="resolution" min="24" max="256" value="100" step="8">
+      <span class="val" id="resolutionVal">100</span>
+    </div>
+    <div class="slider-row">
+      <label class="dim-t has-tip" title="How many time slices (frames) the clip is sampled to along the T axis. More frames = smoother motion and finer time-mixing rotations, but memory and compute grow with the count. The max is the source's real frame count — exact for GIFs, estimated from duration × measured fps for video. Tick 'All frames' below to extract every frame the source has (stays on across loads). If a request is too big to allocate, the app aborts cleanly and asks you to reduce Frames or Resolution. Takes effect on release.">Frames</label>
+      <input type="range" id="frames" min="2" max="240" value="48" step="1">
+      <span class="val" id="framesVal">48</span>
+    </div>
+    <div class="check-row">
+      <input type="checkbox" id="framesAllChk">
+      <label for="framesAllChk" class="has-tip" title="Extract every frame the source has instead of sampling down to the Frames count. Stays on across loads. Overrides the Frames slider while ticked.">All frames</label>
+    </div>
+    <div class="mem-row">
+      <span class="mem-label has-tip" title="Estimated memory the point cloud will use at the current Frames, Resolution and color space — worst case, assuming every pixel is visible (frames × width × height × bytes-per-point). Click the number to switch between MB/GB and an exact byte count.">Est. memory</span>
+      <span class="mem-val" id="memVal" title="Click to toggle bytes / MB·GB">&mdash;</span>
+    </div>
+    <div class="slider-row">
+      <label class="has-tip" title="How 'long' the color axes are relative to the X/Y plane. At 1.0 color and position carry equal weight. Higher makes color axes wider, so rotations that mix color and space move points further; lower keeps pixels spatially anchored.">Color wt</label>
+      <input type="range" id="colorWeight" min="0.1" max="5" value="1" step="0.05">
+      <span class="val" id="colorWeightVal">1.00</span>
+    </div>
+    <div class="slider-row">
+      <label class="dim-t has-tip" title="The xy ↔ time ratio: scales the time axis before rotation. At 1.0 the whole clip's duration spans the same range as the image is wide. Higher stretches time so time-mixing rotations move points further per frame; lower anchors everything near one instant.">Time wt</label>
+      <input type="range" id="timeWeight" min="0.1" max="5" value="1" step="0.05">
+      <span class="val" id="timeWeightVal">1.00</span>
+    </div>
+    <div class="slider-row">
+      <label class="dim-t has-tip" title="Thickness of the visible time slab, in units of frame spacing. This is a display window, not part of the rotation: thin = crisp single-frame slices; thick = several frames at once (motion smear / ghosting).">Time thick</label>
+      <input type="range" id="timeThick" min="0.5" max="8" value="1.5" step="0.1">
+      <span class="val" id="timeThickVal">1.5</span>
+    </div>
+    <div class="toggle-row">
+      <label>Color space</label>
+      <div class="toggle-options" id="colorSpaceOptions">
+        <button class="toggle-btn active" data-cs="rgb">RGB</button>
+        <button class="toggle-btn" data-cs="hsv">HSV</button>
+        <button class="toggle-btn" data-cs="hsl">HSL</button>
+        <button class="toggle-btn" data-cs="mono">Mono</button>
+      </div>
+    </div>
+    <div class="toggle-row">
+      <label class="has-tip" title="How to render points pushed outside the visible color gamut by a rotation: Magenta (obvious flag), Black (they vanish), or Clamp (each channel clamped back into range). The info bar shows the current clip percentage.">OOB color</label>
+      <div class="toggle-options" id="clipOptions">
+        <button class="toggle-btn active" data-mode="0">Magenta</button>
+        <button class="toggle-btn" data-mode="1">Black</button>
+        <button class="toggle-btn" data-mode="2">Clamp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Playback -->
+  <div class="section" id="groupPlayback">
+    <div class="section-title"><span class="dot" style="background:#f0b429"></span> Playback</div>
+    <div class="btn-row" style="margin-bottom:8px;">
+      <button class="btn play" id="btnPlay">&#9654; Play time</button>
+    </div>
+    <div class="slider-row">
+      <label>Speed</label>
+      <input type="range" id="playSpeed" min="0.02" max="2" value="0.25" step="0.01">
+      <span class="val" id="playSpeedVal">0.25</span>
+    </div>
+    <div class="slider-row">
+      <label class="dim-t">Time</label>
+      <input type="range" id="timeScrub" min="0" max="1" value="0.5" step="0.001">
+      <span class="val" id="timeScrubVal">0.50</span>
+    </div>
+  </div>
+
+  <!-- 6×5/2 = 15 rotation planes -->
+  <div class="section group-rotations" id="groupRotations">
+    <div class="section-title"><span class="dot" style="background:#d2a8ff"></span> Rotations</div>
+  </div>
+
+  <!-- 3D view orbit (tumbles the rendered result; screen X, screen Y, depth=time) -->
+  <div class="section" id="groupView">
+    <div class="section-title"><span class="dot" style="background:#39c5cf"></span> View orbit</div>
+    <div class="slider-row">
+      <label class="has-tip" title="Orbit the rendered 3D result in the screen plane (roll). This is a viewing transform, not a dimensional rotation — it doesn't change which points are in the time slab.">X&ndash;Y</label>
+      <input type="range" id="viewXY" min="-180" max="180" value="0" step="1">
+      <span class="val" id="viewXYVal">0&deg;</span>
+    </div>
+    <div class="slider-row">
+      <label class="has-tip" title="Tilt the rendered 3D result around the screen Y axis, bringing the depth (rotated-time) axis into view (yaw).">X&ndash;Z</label>
+      <input type="range" id="viewXZ" min="-180" max="180" value="0" step="1">
+      <span class="val" id="viewXZVal">0&deg;</span>
+    </div>
+    <div class="slider-row">
+      <label class="has-tip" title="Tilt the rendered 3D result around the screen X axis, bringing the depth (rotated-time) axis into view (pitch).">Y&ndash;Z</label>
+      <input type="range" id="viewYZ" min="-180" max="180" value="0" step="1">
+      <span class="val" id="viewYZVal">0&deg;</span>
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="btn-row">
+    <button class="btn" id="btnReset">Reset All</button>
+    <button class="btn" id="btnAnimate">Spin</button>
+    <button class="btn" id="btnRandomize">Randomize</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn" id="btnExport">Export PNG</button>
+    <button class="btn" id="btnExportVideo">Export video</button>
+  </div>
+
+  <!-- Info bar -->
+  <div class="info-bar">
+    <span id="infoPixels">0 pts</span>
+    <span id="infoClip" class="clip-pct zero">0% clip</span>
+    <span id="infoFps">-- fps</span>
+    <span id="infoRenderer" class="has-tip" title="Which renderer is drawing the live view. GPU (WebGPU) transforms and rasterizes the whole cloud on the graphics card every frame; CPU uses the built-in chunked splatter. Large clouds and browsers without WebGPU use the CPU.">CPU</span>
+  </div>
+</aside>
+
+<div class="main" id="mainArea">
+  <canvas id="gpuCanvas"></canvas>
+  <canvas id="canvas"></canvas>
+  <div id="gpuFrameBounds"></div>
+  <div class="time-readout" id="timeReadout">t = 0.00</div>
+  <div class="canvas-hint" id="canvasHint">load a video or use the demo</div>
+  <div class="loading-overlay" id="loadingOverlay">extracting frames…</div>
+</div>
+
+<button id="viewToggle" type="button">View config &#x2922;</button>
+<button id="openVideoBtn" type="button">&#x2b; Open video</button>
+
+<!-- Pre-load resolution / frames selection -->
+<div class="load-modal" id="loadModal">
+  <div class="load-modal-box">
+    <h2 id="loadModalTitle">Load video</h2>
+    <div class="load-native" id="loadNative">&mdash;</div>
+    <div class="load-field">
+      <label for="loadResNum">Resolution &mdash; long side (px)</label>
+      <div class="load-input-row">
+        <input type="range" id="loadResRange" min="24" max="256" step="1" value="256">
+        <input type="number" id="loadResNum" min="24" step="1" value="256">
+      </div>
+    </div>
+    <div class="load-field">
+      <label for="loadFramesNum">Frames</label>
+      <div class="load-input-row">
+        <input type="range" id="loadFramesRange" min="2" max="240" step="1" value="48">
+        <input type="number" id="loadFramesNum" min="2" step="1" value="48">
+      </div>
+    </div>
+    <div class="load-mem" id="loadMemRow">Est. memory: <span id="loadMemVal" title="Click to toggle bytes / MB·GB">&mdash;</span></div>
+    <div class="load-error" id="loadError" style="display:none; color:#f85149; font-size:12px; margin:6px 0 2px;"></div>
+    <div class="load-modal-actions">
+      <button class="btn" id="loadCancelBtn" type="button">Cancel</button>
+      <button class="btn btn-primary" id="loadConfirmBtn" type="button">Load</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Constants
+// ============================================================
+const DIM_NAMES_RGB   = ['X', 'Y', 'T', 'R', 'G', 'B'];
+const DIM_CLASSES_RGB = ['dim-x', 'dim-y', 'dim-t', 'dim-r', 'dim-g', 'dim-b'];
+
+const DIM_NAMES_HSV   = ['X', 'Y', 'T', 'H', 'S', 'V'];
+const DIM_CLASSES_HSV = ['dim-x', 'dim-y', 'dim-t', 'dim-h', 'dim-s', 'dim-v'];
+
+const DIM_NAMES_HSL   = ['X', 'Y', 'T', 'H', 'S', 'L'];
+const DIM_CLASSES_HSL = ['dim-x', 'dim-y', 'dim-t', 'dim-h', 'dim-s', 'dim-l'];
+
+// Monochrome: the three color channels collapse to a single luminance axis,
+// so the voxel is 4D (x, y, t, L) — only 4×3/2 = 6 rotation planes instead of 15.
+const DIM_NAMES_MONO   = ['X', 'Y', 'T', 'L'];
+const DIM_CLASSES_MONO = ['dim-x', 'dim-y', 'dim-t', 'dim-l'];
+
+let DIM_NAMES   = DIM_NAMES_RGB;
+let DIM_CLASSES = DIM_CLASSES_RGB;
+
+const T_AXIS = 2;            // index of the time axis
+let N = 6;                   // total dimensions (2 spatial + 1 time + NC color)
+let NC = 3;                  // number of color dimensions
+let PLANES = [];             // [i, j] pairs — every rotation plane
+let PLANE_LABELS = [];       // HTML label strings
+let PLANE_HAS_TIME = [];     // which planes touch the time axis
+
+function buildPlaneLabels() {
+  PLANE_LABELS = [];
+  for (let k = 0; k < PLANES.length; k++) {
+    const [i, j] = PLANES[k];
+    PLANE_LABELS.push(
+      `<span class="${DIM_CLASSES[i]}">${DIM_NAMES[i]}</span>` +
+      `<span class="sep"> &harr; </span>` +
+      `<span class="${DIM_CLASSES[j]}">${DIM_NAMES[j]}</span>`
+    );
+  }
+}
+
+// Reconfigure dimension names / count / planes for the current color space.
+function configureDims() {
+  if (colorSpace === 'mono')     { DIM_NAMES = DIM_NAMES_MONO; DIM_CLASSES = DIM_CLASSES_MONO; NC = 1; }
+  else if (colorSpace === 'hsv') { DIM_NAMES = DIM_NAMES_HSV;  DIM_CLASSES = DIM_CLASSES_HSV;  NC = 3; }
+  else if (colorSpace === 'hsl') { DIM_NAMES = DIM_NAMES_HSL;  DIM_CLASSES = DIM_CLASSES_HSL;  NC = 3; }
+  else                           { DIM_NAMES = DIM_NAMES_RGB;  DIM_CLASSES = DIM_CLASSES_RGB;  NC = 3; }
+  N = 3 + NC;
+  PLANES = [];
+  for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) PLANES.push([i, j]);
+  PLANE_HAS_TIME = PLANES.map(([i, j]) => i === T_AXIS || j === T_AXIS);
+  buildPlaneLabels();
+  angles     = new Float64Array(PLANES.length);
+  animSpeeds = new Float64Array(PLANES.length);
+}
+
+// ============================================================
+// State
+// ============================================================
+// Point-cloud storage is CHUNKED. A single ArrayBuffer can't exceed ~2 GB in
+// most browsers (Chrome/Safari ~2 GB, Firefox 8 GiB), so a large cloud is split
+// across several typed arrays ("chunks") instead of one giant buffer — total
+// size is then bounded only by available RAM. Every cloud array shares the same
+// `pointsPerChunk`, so a global point index p splits into the SAME
+// (chunkIndex, localIndex) pair across points/rPos/rCol/timeOrder:
+//     ci = p >>> ppcBits;   local = p & ppcMask;
+// pointsPerChunk is the largest power of two whose widest per-point stride
+// (points = N floats) still fits under MAX_CHUNK_BYTES.
+const MAX_CHUNK_BYTES = 1536 * 1024 * 1024;   // 1.5 GiB — safely under the ~2 GB cap
+let pointsChunks    = null;   // Float32Array[] — chunk holds localCount·N  (x,y,t,color…)
+let rPosChunks      = null;   // Float32Array[] — chunk holds localCount·3  (nx,ny,nt)
+let rColChunks      = null;   // Uint8Array[]   — chunk holds localCount·3  (r,g,b)
+let timeOrderChunks = null;   // Uint32Array[]  — chunk holds localCount    (point indices)
+let timeOrderCount  = 0;      // numPoints the current timeOrderChunks was sized for
+let ppcBits = 0, pointsPerChunk = 0, ppcMask = 0, numChunks = 0;
+let numPoints = 0;
+let imgW = 0, imgH = 0, numFrames = 1;
+
+// Rotation cache (recomputed only when angles / weights / clip / colorspace change)
+let rotMatrix = null;   // last rotation matrix (row-major NxN) — used by the
+                        // renderer to size each splat to its rotated cell footprint
+let clippedCount = 0;
+
+// Time index (built with the rotation cache): points bucketed by their rotated
+// time nt so playback can iterate only the visible slab instead of scanning the
+// whole cloud every frame. `timeOrderChunks` lists point indices grouped by bin;
+// `binStart[b]..binStart[b+1]` is the slice of that order for bin b.
+let binStart  = null;   // Int32Array[numBins + 1]
+let numBins   = 0;
+
+// Split the cloud into chunks: pick pointsPerChunk = largest power of two whose
+// widest per-point stride (maxPerPoint floats) still fits under the byte cap.
+function computeChunking(count, maxPerPoint) {
+  const strideBytes = maxPerPoint * 4;   // widest element stride (points = N floats)
+  let bits = 0;
+  while (bits < 30 && (((1 << (bits + 1)) >>> 0) * strideBytes) <= MAX_CHUNK_BYTES) bits++;
+  ppcBits = bits;
+  pointsPerChunk = 1 << bits;
+  ppcMask = pointsPerChunk - 1;
+  numChunks = count === 0 ? 0 : (((count - 1) >>> ppcBits) + 1);
+}
+
+// Allocate a chunked array: numChunks typed arrays of `perPoint` elements per
+// point. May throw (OOM) — callers wrap in try/catch.
+function allocChunks(Ctor, count, perPoint) {
+  const chunks = new Array(numChunks);
+  for (let ci = 0; ci < numChunks; ci++) {
+    const base = ci * pointsPerChunk;
+    const localCount = Math.min(pointsPerChunk, count - base);
+    chunks[ci] = new Ctor(localCount * perPoint);
+  }
+  return chunks;
+}
+let tLo = 0, tHi = 0, tBinScale = 0;   // bin index = floor((nt - tLo) * tBinScale)
+// Density-trimmed play-sweep bounds ⊆ [tLo, tHi]: the range over which the moving
+// time slab always captures a healthy fraction of its peak population, so playback
+// never dims to a blank at the ends (see trimByWindowPop).
+let sweepLo = 0, sweepHi = 0;
+const SWEEP_FRAC = 0.2;   // keep the swept slab's population ≥ 20% of its own peak
+                          // (balances non-blank ends against per-point dwell time:
+                          //  higher => brighter ends but longer linger; ~0.2 is the knee)
+
+let angles     = new Float64Array(15);
+let animSpeeds = new Float64Array(15);
+const vin  = new Float64Array(8);   // scratch input vector (max N = 6)
+const cout = new Float64Array(8);   // scratch output vector
+let animating    = false;   // rotation spin
+let playing      = false;   // time playback
+let exporting    = false;   // video export in progress (suspends the live tick)
+let playPhase    = 0.5;     // 0..1  (0.5 = middle frame)
+let playSpeed    = 0.25;    // full sweeps per second
+let zoomLevel    = 1.0;
+let dotScale     = 1.0;
+let colorWeight  = 1.0;
+let timeWeight   = 1.0;     // xy ↔ time ratio (extent of time axis vs spatial)
+let timeThick    = 1.5;     // slab thickness in units of frame spacing
+let clipMode     = 0;       // 0 = magenta, 1 = black, 2 = clamp
+let colorSpace   = 'rgb';
+let memRaw       = false;   // memory readout format: false = MB/GB, true = exact bytes
+let oomFloor     = Infinity; // smallest total bytes that ever OOM'd — dynamic red threshold
+let needsRender  = true;
+let needsRotate  = true;
+// Live-preview downsampling: while a rotation/weight slider is being dragged (or
+// the spin animation runs), transform only a strided sample of the cloud so each
+// frame stays interactive on huge videos; a full-quality pass runs on release.
+let interacting  = false;
+let previewStride = 1;
+const PREVIEW_BUDGET = 1200000;   // ~max points to transform per interactive frame
+
+// 3D view orbit (screen X, screen Y, depth = rotated-time). A pure *viewing*
+// transform applied after the dimensional rotation — it tumbles the rendered
+// result without changing which points fall in the time slab. Session-only.
+let viewAngles = new Float64Array(3);   // [X-Y, X-Z, Y-Z] radians
+
+// WebGPU renderer. Strictly additive: when the point buffer fits within the
+// device's single-buffer limit we transform + rasterise the whole cloud on the
+// GPU every frame (no CPU counting-sort, no readback). Any failure leaves
+// gpu.active false and the existing CPU chunked renderer takes over unchanged.
+const gpu = {
+  supported: 'gpu' in navigator,
+  ready: false,        // device + pipeline built
+  active: false,       // currently driving the live view
+  device: null, ctx: null, format: null,
+  pipeline: null, uniformBuf: null, matrixBuf: null,
+  pointBuf: null, pointBufPoints: 0, pointBufN: 0,
+  bindGroup: null, depthTex: null, depthW: 0, depthH: 0,
+  bufferLimit: 0,      // maxStorageBufferBindingSize (largest point buffer allowed)
+  uploadedFor: -1,     // numPoints last uploaded (avoid re-upload)
+  // Density-trimmed rotated-time sweep range [trMin, trMax] of the current matrix,
+  // cached so the play sweep stays over the cloud's populated time-depth (see
+  // computeTimeRange / trimByWindowPop). trKey is a cheap signature of the inputs
+  // that determine it, so we only recompute on change rather than every frame. In
+  // CPU mode buildTimeIndex keeps sweepLo/sweepHi current instead; this mirror is
+  // for GPU mode (which skips computeRotation / buildTimeIndex).
+  trMin: -0.5, trMax: 0.5, trKey: '',
+};
+
+// source video frames (to re-extract on colorspace change)
+let sourceVideo  = null; // { frames: [ImageData], w, h, F }  — working res (≤ resolutionCap)
+let sourceMaster = null; // { frames: [ImageData], w, h, F }  — decoded master at the
+                         // resolution chosen in the load dialog (≤ source native size)
+// The original decoded media, kept so the Frames slider can re-sample without
+// re-decoding: { kind:'demo' } | { kind:'gif', all, name } | { kind:'video', video, url, name }
+let loadedMedia  = null;
+
+// FPS tracking
+let frameCount = 0, lastFpsTime = performance.now();
+let lastTick = performance.now();
+
+// slider DOM references
+const sliderEls = [];
+const sliderValEls = [];
+
+// ============================================================
+// DOM refs
+// ============================================================
+const canvas    = document.getElementById('canvas');
+const ctx       = canvas.getContext('2d');
+const mainArea  = document.getElementById('mainArea');
+const dropZone  = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const viewToggle = document.getElementById('viewToggle');
+const loadingOverlay = document.getElementById('loadingOverlay');
+const timeReadout = document.getElementById('timeReadout');
+const gpuFrameBounds = document.getElementById('gpuFrameBounds');
+
+// ============================================================
+// Matrix math (flat NxN in row-major Float64Array)
+// ============================================================
+function identityN() {
+  const m = new Float64Array(N * N);
+  for (let i = 0; i < N; i++) m[i * N + i] = 1;
+  return m;
+}
+
+function matMulN(a, b) {
+  const o = new Float64Array(N * N);
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      let s = 0;
+      const ri = r * N;
+      for (let k = 0; k < N; k++) s += a[ri + k] * b[k * N + c];
+      o[ri + c] = s;
+    }
+  }
+  return o;
+}
+
+function buildRotationMatrix(ang) {
+  let m = identityN();
+  for (let k = 0; k < PLANES.length; k++) {
+    if (Math.abs(ang[k]) < 1e-12) continue;
+    const [i, j] = PLANES[k];
+    const c = Math.cos(ang[k]);
+    const s = Math.sin(ang[k]);
+    const rot = identityN();
+    rot[i * N + i] = c;  rot[i * N + j] = -s;
+    rot[j * N + i] = s;  rot[j * N + j] = c;
+    m = matMulN(rot, m);
+  }
+  return m;
+}
+
+// 3×3 view-orbit matrix (row-major) from the three view angles [X-Y, X-Z, Y-Z].
+// Composed R = Rxy · Rxz · Ryz. Identity when all three are zero.
+function buildViewMatrix(a) {
+  const cz = Math.cos(a[0]), sz = Math.sin(a[0]);   // X-Y (screen roll)
+  const cy = Math.cos(a[1]), sy = Math.sin(a[1]);   // X-Z (yaw)
+  const cx = Math.cos(a[2]), sx = Math.sin(a[2]);   // Y-Z (pitch)
+  const Rxy = [cz, -sz, 0,  sz, cz, 0,  0, 0, 1];
+  const Rxz = [cy, 0, -sy,  0, 1, 0,   sy, 0, cy];
+  const Ryz = [1, 0, 0,  0, cx, -sx,  0, sx, cx];
+  const mul = (A, B) => {
+    const O = new Array(9);
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+      O[r * 3 + c] = A[r * 3] * B[c] + A[r * 3 + 1] * B[3 + c] + A[r * 3 + 2] * B[6 + c];
+    }
+    return O;
+  };
+  return mul(Rxy, mul(Rxz, Ryz));
+}
+
+function viewIsIdentity() {
+  return Math.abs(viewAngles[0]) < 1e-9 && Math.abs(viewAngles[1]) < 1e-9 && Math.abs(viewAngles[2]) < 1e-9;
+}
+
+// ============================================================
+// HSL → RGB (for demo video)
+// ============================================================
+function hsl2rgb(h, s, l) {
+  let r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1; if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+}
+
+// ============================================================
+// RGB ↔ HSV conversions
+// ============================================================
+function rgb2hsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0, s = max === 0 ? 0 : d / max, v = max;
+  if (d !== 0) {
+    if (max === r)      h = ((g - b) / d + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else                h = (r - g) / d + 4;
+    h *= 60;
+  }
+  return [h, s, v];
+}
+
+function hsv2rgb(h, s, v) {
+  h = ((h % 360) + 360) % 360;
+  const c = v * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = v - c;
+  let r, g, b;
+  if      (h < 60)  { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else              { r = c; g = 0; b = x; }
+  return [
+    Math.round((r + m) * 255),
+    Math.round((g + m) * 255),
+    Math.round((b + m) * 255)
+  ];
+}
+
+// ============================================================
+// RGB ↔ HSL conversions (hue in degrees, S/L in [0,1])
+// ============================================================
+function rgb2hsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const d = max - min;
+  const l = (max + min) / 2;
+  let h = 0, s = 0;
+  if (d !== 0) {
+    s = d / (1 - Math.abs(2 * l - 1));
+    if (max === r)      h = ((g - b) / d + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else                h = (r - g) / d + 4;
+    h *= 60;
+  }
+  return [h, s, l];
+}
+
+function hsl2rgbDeg(h, s, l) {
+  h = ((h % 360) + 360) % 360;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = l - c / 2;
+  let r, g, b;
+  if      (h < 60)  { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else              { r = c; g = 0; b = x; }
+  return [
+    Math.round((r + m) * 255),
+    Math.round((g + m) * 255),
+    Math.round((b + m) * 255)
+  ];
+}
+
+// ============================================================
+// Generate sample demo video (orbiting color blob + hue drift)
+// ============================================================
+function generateDemoVideo() {
+  const size = MAX_DIM_CAP, F = Math.min(targetFrames, 48);
+  const frames = [];
+  for (let f = 0; f < F; f++) {
+    const id = new ImageData(size, size);
+    const d = id.data;
+    const phase = f / F;                       // 0..1 through the clip
+    const bx = size / 2 + Math.cos(phase * 2 * Math.PI) * size * 0.28;
+    const by = size / 2 + Math.sin(phase * 2 * Math.PI) * size * 0.28;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const idx = (y * size + x) * 4;
+        const dx = x - bx, dy = y - by;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        // soft orbiting disc whose hue drifts with time
+        const disc = Math.max(0, 1 - dist / (size * 0.22));
+        // background: slow diagonal gradient that shifts over time
+        const bg = 0.10 + 0.10 * Math.sin((x + y) * 0.06 + phase * 6.28);
+        const l = Math.min(1, bg + disc * 0.55);
+        const h = (phase + (x / size) * 0.15 + disc * 0.25) % 1;
+        const s = 0.35 + 0.55 * disc;
+        const [r, g, b] = hsl2rgb(h, s, l);
+        d[idx] = r; d[idx + 1] = g; d[idx + 2] = b; d[idx + 3] = 255;
+      }
+    }
+    frames.push(id);
+  }
+  return { frames, w: size, h: size, F };
+}
+
+// ============================================================
+// Derive the working-resolution source from the high-res master by
+// downsampling every frame to the current resolutionCap. If the cap is
+// at/above the master's size, the master is used directly (no upscaling).
+// Sets `sourceVideo`; call extractPoints(sourceVideo) afterward.
+// ============================================================
+function deriveWorkingSource() {
+  if (!sourceMaster) { sourceVideo = null; return null; }
+  const { frames, w, h, F } = sourceMaster;
+  const scale = Math.min(1, resolutionCap / Math.max(w, h));
+  if (scale >= 1) { sourceVideo = sourceMaster; return sourceVideo; }
+
+  const sw = Math.max(1, Math.round(w * scale));
+  const sh = Math.max(1, Math.round(h * scale));
+  const src = document.createElement('canvas'); src.width = w; src.height = h;
+  const sctx = src.getContext('2d', { willReadFrequently: true });
+  const dst = document.createElement('canvas'); dst.width = sw; dst.height = sh;
+  const dctx = dst.getContext('2d', { willReadFrequently: true });
+
+  const out = [];
+  for (let i = 0; i < frames.length; i++) {
+    sctx.putImageData(frames[i], 0, 0);
+    dctx.clearRect(0, 0, sw, sh);
+    dctx.drawImage(src, 0, 0, sw, sh);
+    out.push(dctx.getImageData(0, 0, sw, sh));
+  }
+  sourceVideo = { frames: out, w: sw, h: sh, F };
+  return sourceVideo;
+}
+
+// ============================================================
+// Re-sample the loaded media at `targetFrames` and rebuild everything.
+// Re-uses the original decoded media (kept in `loadedMedia`) so changing the
+// frame count never re-downloads/re-decodes the source — though for video it
+// does re-seek. Returns a short status string for the info bar.
+// ============================================================
+async function rebuildMaster() {
+  if (!loadedMedia) return '';
+  if (loadedMedia.kind === 'demo') {
+    sourceMaster = generateDemoVideo();
+    return `Demo: orbiting blob (${sourceMaster.w}&times;${sourceMaster.h}, ${sourceMaster.F} frames)`;
+  }
+  if (loadedMedia.kind === 'gif') {
+    const all = loadedMedia.all;
+    const frames = subsampleFrames(all.frames);
+    sourceMaster = { frames, w: all.sw, h: all.sh, F: frames.length };
+    return `Loaded: ${loadedMedia.name} (${all.sw}&times;${all.sh}, ` +
+           `${frames.length}/${all.total} frames${all.engine ? ', ' + all.engine : ''})`;
+  }
+  if (loadedMedia.kind === 'video') {
+    const extracted = await extractVideoFrames(loadedMedia.video);
+    sourceMaster = extracted;
+    return `Loaded: ${loadedMedia.name} (${extracted.w}&times;${extracted.h}, ${extracted.F} frames)`;
+  }
+  return '';
+}
+
+// Heavy: re-sample the loaded source to F frames and rebuild the point cloud.
+// F is clamped to what the source can provide. If the request is simply too big
+// to allocate, extractPoints() catches the failure and asks the user to reduce
+// Frames/Resolution.
+let framesBusy = false;
+async function reExtractFrames(F) {
+  if (!loadedMedia || framesBusy) return;
+  F = Math.max(2, Math.min(Math.round(F), framesCeil()));
+  if (F === targetFrames) { syncFramesSlider(); return; }
+  targetFrames = F;
+  framesBusy = true;
+  clearInfoError();   // drop a stale OOM message from a previous (larger) attempt
+  loadingOverlay.classList.add('show');
+  loadingOverlay.textContent = loadedMedia.kind === 'video' ? 'extracting frames…' : 'resampling…';
+  // Yield so the overlay paints before the (synchronous) heavy work.
+  await new Promise(r => requestAnimationFrame(r));
+  try {
+    const info = await rebuildMaster();
+    deriveWorkingSource();
+    const ok = extractPoints(sourceVideo);
+    // Only stamp the success line when the cloud actually built — otherwise leave
+    // extractPoints' own error message (OOM / no visible pixels) visible.
+    if (ok && info) document.getElementById('imageInfo').innerHTML =
+      info.replace(/(Demo|Loaded): ([^(]+)/, (m, k, name) => `${k}: <span>${name.trim()}</span> `);
+  } finally {
+    loadingOverlay.classList.remove('show');
+    framesBusy = false;
+    syncFramesSlider();
+  }
+}
+
+// From the Frames slider: the user picked an explicit count, so record it as the
+// preference, leave "All" mode, and re-extract.
+function applyFrameCount(F) {
+  framesAll = false;
+  framesPref = Math.max(2, Math.min(Math.round(F), framesCeil()));
+  saveSettings();
+  return reExtractFrames(framesPref);
+}
+
+// Set "All frames" mode (from the checkbox) and re-extract.
+function setFramesAll(on) {
+  if (framesBusy) { syncFramesSlider(); return; }   // revert the checkbox to state
+  framesAll = on;
+  saveSettings();
+  if (!loadedMedia) { syncFramesSlider(); return; }
+  reExtractFrames(resolveTargetFrames());
+}
+
+// Clamp the Frames slider's range to the media's true frame count and sync its
+// displayed value + the "All frames" checkbox. In "All" mode the readout shows
+// "All (N)" and the slider is disabled since it's overridden.
+function syncFramesSlider() {
+  const framesSlider = document.getElementById('frames');
+  const framesValEl  = document.getElementById('framesVal');
+  const framesAllChk = document.getElementById('framesAllChk');
+  const capInt = framesCeil();
+  if (targetFrames > capInt) targetFrames = capInt;   // clamp to what's available
+  framesSlider.max = String(capInt);
+  framesSlider.value = String(targetFrames);
+  framesSlider.disabled = framesAll;
+  framesValEl.textContent = framesAll ? `All (${targetFrames})` : String(targetFrames);
+  framesValEl.classList.toggle('frames-all', framesAll);
+  if (framesAllChk) framesAllChk.checked = framesAll;
+  updateMemDisplay();
+}
+
+// Clamp the sidebar Resolution slider's range to the loaded master's long side.
+// After a load the master is the full chosen resolution, so the slider maxes out
+// there and dragging it down re-samples live (no reload); going higher needs a
+// fresh load (which re-opens the pre-load dialog).
+function syncResolutionSlider() {
+  const slider = document.getElementById('resolution');
+  const valEl  = document.getElementById('resolutionVal');
+  if (!slider) return;
+  const long = sourceMaster ? Math.max(sourceMaster.w, sourceMaster.h) : MAX_DIM_CAP;
+  slider.max = String(long);
+  slider.min = String(Math.min(24, long));
+  if (resolutionCap > long) resolutionCap = long;
+  slider.value = String(resolutionCap);
+  if (valEl) valEl.textContent = String(resolutionCap);
+  updateMemDisplay();
+}
+
+// ============================================================
+// Extract 6D points from a stack of video frames
+// ============================================================
+function extractPoints(video) {
+  const { frames, w, h, F } = video;
+  imgW = w; imgH = h; numFrames = F;
+
+  // Count non-transparent pixels across all frames
+  let count = 0;
+  for (let f = 0; f < F; f++) {
+    const d = frames[f].data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 10) count++;
+  }
+
+  // No visible pixels at all — the frames decoded blank/transparent (a codec or
+  // seeking issue). Report it instead of leaving a silently empty canvas.
+  if (count === 0) {
+    pointsChunks = rPosChunks = rColChunks = timeOrderChunks = null;
+    timeOrderCount = 0; binStart = null; numBins = 0; numChunks = 0;
+    numPoints = 0; clippedCount = 0;
+    document.getElementById('infoPixels').textContent = '0 pts';
+    document.getElementById('imageInfo').innerHTML =
+      `<span class="info-err" style="color:#ff7b72">No visible pixels decoded from this clip — the browser may not support its codec.</span>`;
+    needsRotate = false; needsRender = true;
+    setGpuActive(false); gpu.uploadedFor = -1;
+    return false;
+  }
+
+  // Drop the old buffers first so they're reclaimable before we allocate the
+  // new (possibly much larger) ones — keeps the transient peak nearer 1×.
+  pointsChunks = rPosChunks = rColChunks = timeOrderChunks = null;
+  timeOrderCount = 0; binStart = null; numBins = 0;
+  computeChunking(count, N);
+  // Allocate ALL cloud arrays up front — points, rPos, rCol, AND timeOrder — so
+  // an OOM surfaces immediately instead of halfway through the extraction loop.
+  try {
+    pointsChunks    = allocChunks(Float32Array, count, N);
+    rPosChunks      = allocChunks(Float32Array, count, 3);
+    rColChunks      = allocChunks(Uint8Array,   count, 3);
+    timeOrderChunks = allocChunks(Uint32Array,  count, 1);
+    timeOrderCount  = count;
+  } catch (err) {
+    // Allocation failed (out of memory). Record the failing size so the memory
+    // estimate highlights anything at or above this level from now on.
+    const needed = estimateBytesFor(w, h, Math.max(w, h), F);
+    if (needed < oomFloor) oomFloor = needed;
+    pointsChunks = rPosChunks = rColChunks = timeOrderChunks = null;
+    timeOrderCount = 0; numChunks = 0;
+    numPoints = 0; clippedCount = 0;
+    document.getElementById('infoPixels').textContent = '0 pts';
+    document.getElementById('imageInfo').innerHTML =
+      `<span class="info-err" style="color:#ff7b72">Out of memory building the point cloud (needs ~${formatBytes(needed)}) — reduce Frames or Resolution.</span>`;
+    needsRotate = false; needsRender = true;
+    setGpuActive(false); gpu.uploadedFor = -1;
+    updateMemDisplay();
+    return false;
+  }
+  numPoints = count;
+
+  const sInv = 1 / Math.max(w, h);
+  const halfW = w / 2, halfH = h / 2;
+  const useHSV  = colorSpace === 'hsv';
+  const useHSL  = colorSpace === 'hsl';
+  const useMono = colorSpace === 'mono';
+  const denom = F > 1 ? (F - 1) : 1;
+
+  let pi = 0;
+  let pts = pointsChunks[0];   // current points chunk (swapped at chunk boundaries)
+  for (let f = 0; f < F; f++) {
+    const d = frames[f].data;
+    const tRaw = F > 1 ? (f / denom - 0.5) : 0;   // [-0.5, 0.5]
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const si = (y * w + x) * 4;
+        if (d[si + 3] <= 10) continue;
+        const local = pi & ppcMask;
+        if (local === 0 && pi > 0) pts = pointsChunks[pi >>> ppcBits];
+        const bi = local * N;
+        pts[bi]     = (x - halfW) * sInv;
+        pts[bi + 1] = (y - halfH) * sInv;
+        pts[bi + 2] = tRaw;
+
+        if (useMono) {
+          const L = 0.299 * d[si] + 0.587 * d[si + 1] + 0.114 * d[si + 2];
+          pts[bi + 3] = (L - 128) / 256;
+        } else if (useHSV) {
+          const [hue, sat, val] = rgb2hsv(d[si], d[si + 1], d[si + 2]);
+          pts[bi + 3] = (hue - 180) / 360;
+          pts[bi + 4] = sat - 0.5;
+          pts[bi + 5] = val - 0.5;
+        } else if (useHSL) {
+          const [hue, sat, lig] = rgb2hsl(d[si], d[si + 1], d[si + 2]);
+          pts[bi + 3] = (hue - 180) / 360;
+          pts[bi + 4] = sat - 0.5;
+          pts[bi + 5] = lig - 0.5;
+        } else {
+          const cInv = 1 / 256;
+          pts[bi + 3] = (d[si]     - 128) * cInv;
+          pts[bi + 4] = (d[si + 1] - 128) * cInv;
+          pts[bi + 5] = (d[si + 2] - 128) * cInv;
+        }
+        pi++;
+      }
+    }
+  }
+
+  document.getElementById('infoPixels').textContent = numPoints.toLocaleString() + ' pts';
+  document.getElementById('canvasHint').textContent = `${w} x ${h} x ${F}f`;
+  needsRotate = true;
+  needsRender = true;
+  gpu.uploadedFor = -1;   // new cloud → force a GPU re-upload
+  gpuMaybeActivate();     // switch to the GPU renderer if this cloud fits
+  return true;
+}
+
+// ============================================================
+// Compute rotation cache (heavy 6D transform, done on change only)
+// ============================================================
+function computeRotation(stride) {
+  if (!pointsChunks || numPoints === 0) { clippedCount = 0; return; }
+  stride = stride || 1;
+  previewStride = stride;
+  const m = buildRotationMatrix(angles);
+  rotMatrix = m;
+  const cwt = colorWeight, cwInv = 1 / cwt;
+  const twt = timeWeight;
+  const cm = clipMode;
+  const hsv  = colorSpace === 'hsv';
+  const hsl  = colorSpace === 'hsl';
+  const mono = colorSpace === 'mono';
+  let clipped = 0, sampled = 0;
+  let tMin = Infinity, tMax = -Infinity;
+
+  // Global strided walk. With stride 1 this transforms every point (full
+  // quality). With stride > 1 only a strided sample is transformed into its own
+  // slot — a downsampled live preview while a slider is dragged. Random access
+  // splits the global index into (chunk, local) via shift/mask; the shift/mask
+  // cost is negligible next to the NxN matmul + colour conversion below.
+  for (let p = 0; p < numPoints; p += stride) {
+    const pts = pointsChunks[p >>> ppcBits];
+    const bi  = (p & ppcMask) * N;
+    // Weighted input vector: x, y unweighted; t by timeWeight; color by colorWeight.
+    vin[0] = pts[bi];
+    vin[1] = pts[bi + 1];
+    vin[2] = pts[bi + 2] * twt;
+    for (let c = 3; c < N; c++) vin[c] = pts[bi + c] * cwt;
+
+    // NxN matrix-vector multiply
+    for (let r = 0; r < N; r++) {
+      let s = 0;
+      const ri = r * N;
+      for (let k = 0; k < N; k++) s += m[ri + k] * vin[k];
+      cout[r] = s;
+    }
+    const nx = cout[0], ny = cout[1], nt = cout[2];
+    const nr = cout[3], ng = cout[4], nb = cout[5];
+
+    if (nt < tMin) tMin = nt;
+    if (nt > tMax) tMax = nt;
+
+    const rp  = rPosChunks[p >>> ppcBits];
+    const pi3 = (p & ppcMask) * 3;
+    rp[pi3]     = nx;
+    rp[pi3 + 1] = ny;
+    rp[pi3 + 2] = nt;
+
+    let cr, cg, cb, oob;
+    if (mono) {
+      const L = nr * cwInv * 256 + 128;
+      oob = L < 0 || L > 255;
+      if (oob) {
+        clipped++;
+        if (cm === 0)      { cr = 255; cg = 0; cb = 255; }
+        else if (cm === 1) { cr = 0;   cg = 0; cb = 0; }
+        else { const g = L < 0 ? 0 : (L > 255 ? 255 : L | 0); cr = cg = cb = g; }
+      } else {
+        const g = L | 0; cr = g; cg = g; cb = g;
+      }
+    } else if (hsv) {
+      const hue = nr * cwInv * 360 + 180;
+      const sat = ng * cwInv + 0.5;
+      const val = nb * cwInv + 0.5;
+      oob = sat < 0 || sat > 1 || val < 0 || val > 1;
+      if (oob) {
+        clipped++;
+        if (cm === 0)      { cr = 255; cg = 0; cb = 255; }
+        else if (cm === 1) { cr = 0;   cg = 0; cb = 0; }
+        else {
+          const clH = ((hue % 360) + 360) % 360;
+          const clS = Math.max(0, Math.min(1, sat));
+          const clV = Math.max(0, Math.min(1, val));
+          [cr, cg, cb] = hsv2rgb(clH, clS, clV);
+        }
+      } else {
+        [cr, cg, cb] = hsv2rgb(hue, sat, val);
+      }
+    } else if (hsl) {
+      const hue = nr * cwInv * 360 + 180;
+      const sat = ng * cwInv + 0.5;
+      const lig = nb * cwInv + 0.5;
+      oob = sat < 0 || sat > 1 || lig < 0 || lig > 1;
+      if (oob) {
+        clipped++;
+        if (cm === 0)      { cr = 255; cg = 0; cb = 255; }
+        else if (cm === 1) { cr = 0;   cg = 0; cb = 0; }
+        else {
+          const clS = Math.max(0, Math.min(1, sat));
+          const clL = Math.max(0, Math.min(1, lig));
+          [cr, cg, cb] = hsl2rgbDeg(hue, clS, clL);
+        }
+      } else {
+        [cr, cg, cb] = hsl2rgbDeg(hue, sat, lig);
+      }
+    } else {
+      cr = (nr * cwInv * 256 + 128) | 0;
+      cg = (ng * cwInv * 256 + 128) | 0;
+      cb = (nb * cwInv * 256 + 128) | 0;
+      oob = cr < 0 || cr > 255 || cg < 0 || cg > 255 || cb < 0 || cb > 255;
+      if (oob) {
+        clipped++;
+        if (cm === 0)      { cr = 255; cg = 0; cb = 255; }
+        else if (cm === 1) { cr = 0;   cg = 0; cb = 0; }
+        else {
+          if (cr < 0) cr = 0; else if (cr > 255) cr = 255;
+          if (cg < 0) cg = 0; else if (cg > 255) cg = 255;
+          if (cb < 0) cb = 0; else if (cb > 255) cb = 255;
+        }
+      }
+    }
+    const rc = rColChunks[p >>> ppcBits];
+    rc[pi3]     = cr;
+    rc[pi3 + 1] = cg;
+    rc[pi3 + 2] = cb;
+    sampled++;
+  }
+
+  clippedCount = clipped;
+  const clipEl = document.getElementById('infoClip');
+  if (sampled > 0) {
+    const pct = (clipped / sampled * 100);
+    clipEl.textContent = pct.toFixed(1) + '% clip';
+    clipEl.classList.toggle('zero', clipped === 0);
+  }
+
+  buildTimeIndex(tMin, tMax, stride);
+}
+
+// Half-thickness of the play slab in rotated-time units (must match the value the
+// renderers cull with). The slab spans timeThick frames' worth of time.
+function currentSlabHalf() {
+  const frameSpacing = numFrames > 1 ? timeWeight / (numFrames - 1) : 1e9;
+  return timeThick * frameSpacing * 0.5;
+}
+
+// Density-trimmed rotated-time sweep range of the whole cloud under matrix `m`.
+// Only the time output row (row 2) of the N×N matmul matters, so this is far
+// cheaper than a full computeRotation — two strided/full passes reading N values/
+// point (one for min/max, one to histogram), then trimByWindowPop lops off the
+// tails where the moving slab would catch too few points. Used in GPU mode, where
+// computeRotation never runs, to keep the play sweep over the cloud's populated
+// time-depth (so the thin slab can't sweep out into the sparse tails and dim the
+// frame to a near-blank for part of every loop).
+function computeTimeRange(m, stride) {
+  if (!pointsChunks || numPoints === 0) return [-0.5 * timeWeight, 0.5 * timeWeight];
+  stride = stride || 1;
+  const twt = timeWeight, cwt = colorWeight;
+  const r = 2 * N;                       // time output row offset into the matrix
+  let tMin = Infinity, tMax = -Infinity;
+  for (let p = 0; p < numPoints; p += stride) {
+    const pts = pointsChunks[p >>> ppcBits];
+    const bi  = (p & ppcMask) * N;
+    let s = m[r] * pts[bi] + m[r + 1] * pts[bi + 1] + m[r + 2] * (pts[bi + 2] * twt);
+    for (let c = 3; c < N; c++) s += m[r + c] * (pts[bi + c] * cwt);
+    if (s < tMin) tMin = s;
+    if (s > tMax) tMax = s;
+  }
+  if (!(tMin <= tMax)) return [-0.5 * timeWeight, 0.5 * timeWeight];
+  if (tMax === tMin) return [tMin, tMax];
+
+  // Second pass: histogram the rotated time (fine enough that the slab spans a good
+  // handful of bins), prefix-sum it, then trim to the range where a moving slab
+  // stays well-populated. nb keeps the slab ≥ ~a few bins wide even when a rotation
+  // stretches the time span far past the slab thickness.
+  const slabHalf = currentSlabHalf();
+  const span = tMax - tMin;
+  let nb = Math.ceil(6 * span / Math.max(slabHalf, 1e-9));
+  nb = Math.max(64, Math.min(4096, nb));
+  const cum = new Int32Array(nb + 1);
+  const scale = nb / span;
+  const last = nb - 1;
+  for (let p = 0; p < numPoints; p += stride) {
+    const pts = pointsChunks[p >>> ppcBits];
+    const bi  = (p & ppcMask) * N;
+    let s = m[r] * pts[bi] + m[r + 1] * pts[bi + 1] + m[r + 2] * (pts[bi + 2] * twt);
+    for (let c = 3; c < N; c++) s += m[r + c] * (pts[bi + c] * cwt);
+    let b = ((s - tMin) * scale) | 0;
+    if (b < 0) b = 0; else if (b > last) b = last;
+    cum[b + 1]++;
+  }
+  for (let b = 0; b < nb; b++) cum[b + 1] += cum[b];
+  return trimByWindowPop(cum, nb, tMin, scale, slabHalf, SWEEP_FRAC) || [tMin, tMax];
+}
+
+// Given a rotated-time prefix-sum histogram (cum[k] = number of points whose bin
+// index floor((nt-lo)*sc) is < k), return the sub-range [lo', hi'] over which a slab
+// of half-width slabHalf always captures at least `frac` of its own peak population.
+// What the eye actually sees is how many points the moving slab catches, and that
+// depends on the slab width — not raw bin height. Rotation spreads a frame's pixels
+// along the time axis, so the slab's catch tails off toward the extremes (only the
+// corner pixels reach the min/max); sweeping there fades the frame to a near-blank
+// for part of every loop. Trimming to the well-populated core prevents that. A
+// uniform distribution (identity: dense frames) never dips much below ~half its peak
+// even at the ends, so it stays above the threshold and is returned intact — normal
+// playback is unchanged. Returns null if the histogram is empty.
+function trimByWindowPop(cum, nb, lo, sc, slabHalf, frac) {
+  const binW = 1 / sc;
+  const winPop = (b) => {                 // slab population centred on bin b's centre
+    const t = lo + (b + 0.5) * binW;
+    let a = ((t - slabHalf - lo) * sc) | 0;
+    let z = ((t + slabHalf - lo) * sc) | 0;
+    if (a < 0) a = 0; else if (a > nb) a = nb;
+    if (z < 0) z = 0; else if (z > nb - 1) z = nb - 1;
+    return z + 1 <= a ? 0 : cum[z + 1] - cum[a];
+  };
+  let peak = 0;
+  for (let b = 0; b < nb; b++) { const w = winPop(b); if (w > peak) peak = w; }
+  if (peak === 0) return null;
+  const thresh = peak * frac;
+  let loB = 0;      while (loB < nb  && winPop(loB) < thresh) loB++;
+  let hiB = nb - 1; while (hiB > loB && winPop(hiB) < thresh) hiB--;
+  if (loB > hiB) return null;
+  return [lo + loB * binW, lo + (hiB + 1) * binW];
+}
+
+// Counting-sort the points into bins by their rotated time nt, so render() can
+// walk only the bins spanning the current time slab instead of every point.
+function buildTimeIndex(tMin, tMax, stride) {
+  stride = stride || 1;
+  tLo = tMin;
+  tHi = tMax;
+  const range = tMax - tMin;
+
+  // One bin ≈ a quarter-frame of time; keeps bins fine enough that a thin slab
+  // touches only a handful, but bounded so the arrays stay small.
+  numBins = Math.max(1, Math.min(65536, numFrames * 4, numPoints));
+  tBinScale = range > 0 ? numBins / range : 0;
+
+  if (!timeOrderChunks || timeOrderCount !== numPoints) {
+    timeOrderChunks = allocChunks(Uint32Array, numPoints, 1);
+    timeOrderCount = numPoints;
+  }
+  if (!binStart || binStart.length !== numBins + 1) {
+    binStart = new Int32Array(numBins + 1);
+  } else {
+    binStart.fill(0);
+  }
+
+  // Only the strided sample of points was transformed (stride === 1 → all of
+  // them), so the index covers exactly those points, packed into the front of
+  // timeOrderChunks. render() walks [binStart[loB], binStart[hiB+1]).
+
+  // Degenerate: all sampled points share one time value → single bin.
+  if (tBinScale === 0) {
+    let n = 0;
+    for (let p = 0; p < numPoints; p += stride) {
+      timeOrderChunks[n >>> ppcBits][n & ppcMask] = p;
+      n++;
+    }
+    binStart[0] = 0;
+    for (let b = 1; b <= numBins; b++) binStart[b] = n;
+    sweepLo = tLo; sweepHi = tHi;
+    return;
+  }
+
+  const lastBin = numBins - 1;
+  // Count per bin (offset by 1 so a prefix sum yields start offsets).
+  for (let p = 0; p < numPoints; p += stride) {
+    const rp = rPosChunks[p >>> ppcBits];
+    let b = ((rp[(p & ppcMask) * 3 + 2] - tLo) * tBinScale) | 0;
+    if (b < 0) b = 0; else if (b > lastBin) b = lastBin;
+    binStart[b + 1]++;
+  }
+  for (let b = 0; b < numBins; b++) binStart[b + 1] += binStart[b];
+
+  // Trim the play-sweep range to where the moving slab stays well-populated (binStart
+  // is already the prefix sum the trimmer needs). Keeps playback from fading to a
+  // near-blank at the ends — see trimByWindowPop.
+  {
+    const res = trimByWindowPop(binStart, numBins, tLo, tBinScale, currentSlabHalf(), SWEEP_FRAC);
+    if (res) { sweepLo = res[0]; sweepHi = res[1]; }
+    else { sweepLo = tLo; sweepHi = tHi; }
+  }
+
+  // Scatter point indices into their bins using a moving cursor.
+  const cursor = binStart.slice(0, numBins);
+  for (let p = 0; p < numPoints; p += stride) {
+    const rp = rPosChunks[p >>> ppcBits];
+    let b = ((rp[(p & ppcMask) * 3 + 2] - tLo) * tBinScale) | 0;
+    if (b < 0) b = 0; else if (b > lastBin) b = lastBin;
+    const dst = cursor[b]++;
+    timeOrderChunks[dst >>> ppcBits][dst & ppcMask] = p;
+  }
+}
+
+// Map a time value to its bin index, clamped to [0, numBins-1].
+function timeBin(t) {
+  let b = ((t - tLo) * tBinScale) | 0;
+  if (b < 0) b = 0; else if (b >= numBins) b = numBins - 1;
+  return b;
+}
+
+// ============================================================
+// Rendering — dispatch to the GPU renderer when it's driving the live view,
+// else the CPU splatter. Export always forces the CPU path (it reads the 2D
+// canvas), so `exporting` pins us to renderCPU.
+// ============================================================
+function render() {
+  if (gpu.active && !exporting) {
+    if (renderGPU()) return;   // GPU drew the frame
+    // GPU render failed → fall back permanently to CPU for the rest of the session.
+    // GPU mode never ran computeRotation, so the CPU caches (rotated positions,
+    // colours, tLo/tHi) are stale for the current angles — refresh them once here
+    // before the first CPU frame so renderCPU's time sweep uses the right range.
+    setGpuActive(false);
+    computeRotation();
+  }
+  renderCPU();
+}
+
+function renderCPU() {
+  const cw = canvas.width, ch = canvas.height;
+  if (cw === 0 || ch === 0) return;
+
+  ctx.fillStyle = '#010409';
+  ctx.fillRect(0, 0, cw, ch);
+
+  if (!pointsChunks || numPoints === 0) return;
+
+  // 1:1 mapping at zoom 1 — one source pixel = one screen pixel. Normalized
+  // coords were divided by max(imgW, imgH), so scaling by that (times zoom)
+  // restores original pixel spacing.
+  const displayScale = Math.max(imgW, imgH) * zoomLevel;
+  const cx = cw / 2, cy = ch / 2;
+
+  // 3D view orbit: rotate the (nx, ny, nt) result before projecting. Identity is
+  // the fast/common path (bit-for-bit unchanged); when active the view matrix
+  // folds the rotated-time axis into the screen so the cloud tumbles in depth.
+  const vId = viewIsIdentity();
+  const VM = vId ? null : buildViewMatrix(viewAngles);
+  // projTo(x,y,t) → screen px, written to _px/_py (no per-point allocation).
+  let _px = 0, _py = 0;
+  const projTo = (x, y, t) => {
+    if (vId) { _px = x * displayScale + cx; _py = y * displayScale + cy; return; }
+    const vx = VM[0] * x + VM[1] * y + VM[2] * t;
+    const vy = VM[3] * x + VM[4] * y + VM[5] * t;
+    _px = vx * displayScale + cx; _py = vy * displayScale + cy;
+  };
+  const vrot = (vx, vy, vz) => (vId ? [vx, vy]
+    : [VM[0] * vx + VM[1] * vy + VM[2] * vz, VM[3] * vx + VM[4] * vy + VM[5] * vz]);
+
+  const imgData = ctx.getImageData(0, 0, cw, ch);
+  const buf = imgData.data;
+
+  // Continuous splat footprint. A source sample isn't a bare point — it's a
+  // cell on the (x, y, t) sampling grid, and *every* axis (space, time, AND
+  // colour) is a continuous field sampled at the pixels. After rotation the
+  // cell's screen footprint stretches, so instead of a fixed square we splat
+  // the box that reaches to each of the sample's grid neighbours. Because a
+  // neighbour's cached rotated position already folds in its colour, this makes
+  // the surface continuous no matter which dimension a rotation tips into a
+  // screen axis — closing the stripes a plain square would leave (time rotated
+  // into X, colour rotated into X, etc.) while collapsing back to one pixel at
+  // identity. Dot scale still scales the reach (below 1 reopens pointillist
+  // gaps); a cap bounds the worst-case smear so the frame rate survives.
+  const zoom    = zoomLevel;                                   // screen px / source pixel
+  const dtw     = numFrames > 1 ? timeWeight / (numFrames - 1) : 0;
+  const tScreen = dtw * displayScale;                          // screen px / frame step
+  const M = rotMatrix;
+  const ds = dotScale;
+  const CAP = 64;   // clamp runaway smears (strong colour/time rotation + zoom)
+  const W = imgW, H = imgH, WH = W * H;
+  // Dense = one point per pixel per frame (no transparency skipped), so a
+  // point's index is its grid position and neighbours are simple offsets.
+  // Neighbour-footprint expansion needs every grid neighbour's rotated position
+  // to be current; during a strided preview only a sample was transformed, so
+  // fall back to the matrix-derived box instead of reading stale neighbours.
+  const dense = !!M && numPoints === numFrames * WH && previewStride === 1;
+
+  // Fallback edge-vector box (used when the cloud is sparse — e.g. a
+  // transparent GIF — so neighbours can't be found by index). Covers x/y/t but
+  // not colour, matching the original behaviour there.
+  let cox0 = 0, cox1 = 1, coy0 = 0, coy1 = 1;
+  if (M) {
+    // Screen deltas of a unit source-pixel step in x, y, and one frame in t —
+    // view-rotated so the box tilts with the orbit (at identity vrot() is a
+    // no-op and these collapse to the original M-row edge vectors).
+    const dX = vrot(M[0] * zoom,     M[N] * zoom,     M[2 * N] * zoom);
+    const dY = vrot(M[1] * zoom,     M[N + 1] * zoom, M[2 * N + 1] * zoom);
+    const dT = vrot(M[2] * tScreen,  M[N + 2] * tScreen, M[2 * N + 2] * tScreen);
+    const ex = dX[0] * ds, ey = dY[0] * ds, et = dT[0] * ds;
+    const gx = dX[1] * ds, gy = dY[1] * ds, gt = dT[1] * ds;
+    cox0 = Math.max(-CAP, Math.floor(Math.min(0, ex) + Math.min(0, ey) + Math.min(0, et)));
+    cox1 = Math.min(CAP + 1, Math.ceil(Math.max(0, ex) + Math.max(0, ey) + Math.max(0, et)));
+    coy0 = Math.max(-CAP, Math.floor(Math.min(0, gx) + Math.min(0, gy) + Math.min(0, gt)));
+    coy1 = Math.min(CAP + 1, Math.ceil(Math.max(0, gx) + Math.max(0, gy) + Math.max(0, gt)));
+    if (cox1 - cox0 < 1) cox1 = cox0 + 1;
+    if (coy1 - coy0 < 1) coy1 = coy0 + 1;
+  } else {
+    cox1 = Math.max(1, Math.ceil(zoom * ds)); coy1 = cox1;
+  }
+
+  // Time slab: keep only points whose rotated time nt sits near the
+  // current playback time. Width scales with the per-frame spacing.
+  const frameSpacing = numFrames > 1 ? timeWeight / (numFrames - 1) : 1e9;
+  const slabHalf = timeThick * frameSpacing * 0.5;
+  // Sweep across the cloud's density-populated rotated-time range [sweepLo, sweepHi]
+  // (kept current by buildTimeIndex) rather than the fixed ±0.5·timeWeight, so a
+  // rotation that mixes time with x/y/colour can't push the thin slab off into the
+  // sparse tails of the cloud and blank the frame for part of the loop. At identity
+  // the distribution is uniform (no tail to trim) and sweepLo/sweepHi == ∓0.5·
+  // timeWeight, so this reduces to the original sweep (no change without rotation).
+  const tView = sweepLo + playPhase * (sweepHi - sweepLo);
+  const winLo = tView - slabHalf, winHi = tView + slabHalf;
+
+  // Splat one cached point at index p.
+  const splat = (p) => {
+    // Random access → split the global index into (chunk, local) via shift/mask.
+    const rp = rPosChunks[p >>> ppcBits];
+    const pi3 = (p & ppcMask) * 3;
+    const nt = rp[pi3 + 2];
+    if (nt < winLo || nt > winHi) return;
+
+    const bx = rp[pi3], by = rp[pi3 + 1];
+    projTo(bx, by, nt);
+    const bsx = _px, bsy = _py;           // base screen position (float)
+    const sx = bsx | 0;
+    const sy = bsy | 0;
+
+    let ox0 = cox0, ox1 = cox1, oy0 = coy0, oy1 = coy1;
+    if (dense) {
+      // Reach to the +x, +y, +t grid neighbours (mirroring at the far edges).
+      const x = p % W, rem = (p - x) / W, y = rem % H, f = (rem - y) / H;
+      let lox = 0, hix = 0, loy = 0, hiy = 0;
+      if (W > 1) {
+        const sg = x < W - 1 ? 1 : -1, n = x < W - 1 ? p + 1 : p - 1;
+        const nrp = rPosChunks[n >>> ppcBits], nl = (n & ppcMask) * 3;
+        projTo(nrp[nl], nrp[nl + 1], nrp[nl + 2]);
+        const dnx = sg * (_px - bsx) * ds, dny = sg * (_py - bsy) * ds;
+        if (dnx < lox) lox = dnx; if (dnx > hix) hix = dnx;
+        if (dny < loy) loy = dny; if (dny > hiy) hiy = dny;
+      }
+      if (H > 1) {
+        const sg = y < H - 1 ? 1 : -1, n = y < H - 1 ? p + W : p - W;
+        const nrp = rPosChunks[n >>> ppcBits], nl = (n & ppcMask) * 3;
+        projTo(nrp[nl], nrp[nl + 1], nrp[nl + 2]);
+        const dnx = sg * (_px - bsx) * ds, dny = sg * (_py - bsy) * ds;
+        if (dnx < lox) lox = dnx; if (dnx > hix) hix = dnx;
+        if (dny < loy) loy = dny; if (dny > hiy) hiy = dny;
+      }
+      if (numFrames > 1) {
+        const sg = f < numFrames - 1 ? 1 : -1, n = f < numFrames - 1 ? p + WH : p - WH;
+        const nrp = rPosChunks[n >>> ppcBits], nl = (n & ppcMask) * 3;
+        projTo(nrp[nl], nrp[nl + 1], nrp[nl + 2]);
+        const dnx = sg * (_px - bsx) * ds, dny = sg * (_py - bsy) * ds;
+        if (dnx < lox) lox = dnx; if (dnx > hix) hix = dnx;
+        if (dny < loy) loy = dny; if (dny > hiy) hiy = dny;
+      }
+      ox0 = Math.max(-CAP, Math.floor(lox)); ox1 = Math.min(CAP + 1, Math.ceil(hix));
+      oy0 = Math.max(-CAP, Math.floor(loy)); oy1 = Math.min(CAP + 1, Math.ceil(hiy));
+      if (ox1 - ox0 < 1) ox1 = ox0 + 1;
+      if (oy1 - oy0 < 1) oy1 = oy0 + 1;
+    }
+
+    const rc = rColChunks[p >>> ppcBits];
+    const cr = rc[pi3], cg = rc[pi3 + 1], cb = rc[pi3 + 2];
+    const xStart = sx + ox0, xEnd = sx + ox1;
+    const yEnd = sy + oy1;
+    for (let fy = sy + oy0; fy < yEnd; fy++) {
+      if (fy < 0 || fy >= ch) continue;
+      const rowOff = fy * cw;
+      for (let fx = xStart; fx < xEnd; fx++) {
+        if (fx < 0 || fx >= cw) continue;
+        const idx = (rowOff + fx) << 2;
+        buf[idx]     = cr;
+        buf[idx + 1] = cg;
+        buf[idx + 2] = cb;
+        buf[idx + 3] = 255;
+      }
+    }
+  };
+
+  if (timeOrderChunks && binStart) {
+    // Fast path: the slab is entirely outside the cloud's time range → nothing
+    // to draw. Otherwise walk only the bins the slab spans.
+    if (winHi >= tLo && winLo <= tHi) {
+      const loB = timeBin(winLo);
+      const hiB = timeBin(winHi);
+      const end = binStart[hiB + 1];
+      for (let ii = binStart[loB]; ii < end; ii++) {
+        splat(timeOrderChunks[ii >>> ppcBits][ii & ppcMask]);
+      }
+    }
+  } else {
+    // Fallback: no usable index (e.g. all points at one time) → full scan.
+    for (let p = 0; p < numPoints; p++) splat(p);
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+
+  // Original frame bounds (faint dashed rectangle)
+  const maxDim = Math.max(imgW, imgH);
+  const halfBW = (imgW / (2 * maxDim)) * displayScale;
+  const halfBH = (imgH / (2 * maxDim)) * displayScale;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 5]);
+  ctx.strokeRect(cx - halfBW, cy - halfBH, halfBW * 2, halfBH * 2);
+  ctx.restore();
+
+  // Time readout
+  timeReadout.textContent = 't = ' + tView.toFixed(3);
+}
+
+// ============================================================
+// WebGPU renderer — transform + rasterise the whole cloud on the GPU every
+// frame (no CPU counting-sort, no readback). Activated only when the point
+// buffer fits the device's single-buffer limit; any failure falls back to the
+// CPU splatter above. The vertex shader mirrors computeRotation() + renderCPU():
+// weighted N×N matmul, colour-space conversion + clip, time-slab cull, the
+// neighbour/matrix splat footprint, and the 3D view orbit.
+// ============================================================
+const GPU_WGSL = `
+struct U {
+  v0: vec4<f32>,        // view matrix row 0 (xyz)
+  v1: vec4<f32>,        // view matrix row 1
+  v2: vec4<f32>,        // view matrix row 2
+  params: vec4<f32>,    // displayScale, cx, cy, dotScale
+  slab: vec4<f32>,      // winLo, winHi, timeWeight, colorWeight
+  screen: vec4<f32>,    // canvasW, canvasH, sInv, dtwStep
+  grid: vec4<f32>,      // W, H, WH, numFrames
+  flags: vec4<u32>,     // N, colorSpaceId, clipMode, dense
+};
+@group(0) @binding(0) var<uniform> u: U;
+@group(0) @binding(1) var<storage, read> pts: array<f32>;
+@group(0) @binding(2) var<storage, read> mat: array<f32>;
+
+fn readRaw(p: u32) -> array<f32, 6> {
+  var r = array<f32,6>(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  let nn = u.flags.x;
+  let base = p * nn;
+  for (var k: u32 = 0u; k < nn; k = k + 1u) { r[k] = pts[base + k]; }
+  return r;
+}
+
+fn transformFull(raw: array<f32,6>) -> array<f32,6> {
+  let nn = u.flags.x;
+  let twt = u.slab.z;
+  let cwt = u.slab.w;
+  var vin = array<f32,6>(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  vin[0] = raw[0];
+  vin[1] = raw[1];
+  vin[2] = raw[2] * twt;
+  for (var c: u32 = 3u; c < nn; c = c + 1u) { vin[c] = raw[c] * cwt; }
+  var o = array<f32,6>(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+  for (var a: u32 = 0u; a < nn; a = a + 1u) {
+    var s: f32 = 0.0;
+    for (var k: u32 = 0u; k < nn; k = k + 1u) { s = s + mat[a * nn + k] * vin[k]; }
+    o[a] = s;
+  }
+  return o;
+}
+
+fn transformPos(raw: array<f32,6>) -> vec3<f32> {
+  let full = transformFull(raw);
+  return vec3<f32>(full[0], full[1], full[2]);
+}
+
+fn viewRot(p: vec3<f32>) -> vec3<f32> {
+  return vec3<f32>(dot(u.v0.xyz, p), dot(u.v1.xyz, p), dot(u.v2.xyz, p));
+}
+
+fn screenOf(pos3: vec3<f32>) -> vec2<f32> {
+  let v = viewRot(pos3);
+  return vec2<f32>(v.x * u.params.x + u.params.y, v.y * u.params.x + u.params.z);
+}
+
+fn hue2rgb(hDeg: f32, c: f32, x: f32) -> vec3<f32> {
+  let h = (hDeg - floor(hDeg / 360.0) * 360.0);
+  if (h < 60.0)  { return vec3<f32>(c, x, 0.0); }
+  if (h < 120.0) { return vec3<f32>(x, c, 0.0); }
+  if (h < 180.0) { return vec3<f32>(0.0, c, x); }
+  if (h < 240.0) { return vec3<f32>(0.0, x, c); }
+  if (h < 300.0) { return vec3<f32>(x, 0.0, c); }
+  return vec3<f32>(c, 0.0, x);
+}
+fn hsv2rgb(hDeg: f32, s: f32, v: f32) -> vec3<f32> {
+  let h = (hDeg - floor(hDeg / 360.0) * 360.0);
+  let c = v * s;
+  let x = c * (1.0 - abs((h / 60.0) - floor((h / 60.0) / 2.0) * 2.0 - 1.0));
+  return hue2rgb(h, c, x) + vec3<f32>(v - c);
+}
+fn hsl2rgb(hDeg: f32, s: f32, l: f32) -> vec3<f32> {
+  let h = (hDeg - floor(hDeg / 360.0) * 360.0);
+  let c = (1.0 - abs(2.0 * l - 1.0)) * s;
+  let x = c * (1.0 - abs((h / 60.0) - floor((h / 60.0) / 2.0) * 2.0 - 1.0));
+  return hue2rgb(h, c, x) + vec3<f32>(l - c / 2.0);
+}
+
+fn computeColor(full: array<f32,6>) -> vec3<f32> {
+  let cs = u.flags.y;
+  let cm = u.flags.z;
+  let cwInv = 1.0 / u.slab.w;
+  let magenta = vec3<f32>(1.0, 0.0, 1.0);
+  let black = vec3<f32>(0.0, 0.0, 0.0);
+  if (cs == 3u) {                       // mono
+    let L = full[3] * cwInv * 256.0 + 128.0;
+    if (L < 0.0 || L > 255.0) {
+      if (cm == 0u) { return magenta; }
+      if (cm == 1u) { return black; }
+      return vec3<f32>(clamp(L, 0.0, 255.0) / 255.0);
+    }
+    return vec3<f32>(L / 255.0);
+  } else if (cs == 1u) {                // hsv
+    let hue = full[3] * cwInv * 360.0 + 180.0;
+    let sat = full[4] * cwInv + 0.5;
+    let val = full[5] * cwInv + 0.5;
+    if (sat < 0.0 || sat > 1.0 || val < 0.0 || val > 1.0) {
+      if (cm == 0u) { return magenta; }
+      if (cm == 1u) { return black; }
+      return hsv2rgb(hue, clamp(sat, 0.0, 1.0), clamp(val, 0.0, 1.0));
+    }
+    return hsv2rgb(hue, sat, val);
+  } else if (cs == 2u) {                // hsl
+    let hue = full[3] * cwInv * 360.0 + 180.0;
+    let sat = full[4] * cwInv + 0.5;
+    let lig = full[5] * cwInv + 0.5;
+    if (sat < 0.0 || sat > 1.0 || lig < 0.0 || lig > 1.0) {
+      if (cm == 0u) { return magenta; }
+      if (cm == 1u) { return black; }
+      return hsl2rgb(hue, clamp(sat, 0.0, 1.0), clamp(lig, 0.0, 1.0));
+    }
+    return hsl2rgb(hue, sat, lig);
+  }
+  // rgb
+  let cr = full[3] * cwInv * 256.0 + 128.0;
+  let cg = full[4] * cwInv * 256.0 + 128.0;
+  let cb = full[5] * cwInv * 256.0 + 128.0;
+  if (cr < 0.0 || cr > 255.0 || cg < 0.0 || cg > 255.0 || cb < 0.0 || cb > 255.0) {
+    if (cm == 0u) { return magenta; }
+    if (cm == 1u) { return black; }
+    return vec3<f32>(clamp(cr, 0.0, 255.0), clamp(cg, 0.0, 255.0), clamp(cb, 0.0, 255.0)) / 255.0;
+  }
+  return vec3<f32>(cr, cg, cb) / 255.0;
+}
+
+struct VOut {
+  @builtin(position) pos: vec4<f32>,
+  @location(0) @interpolate(flat) color: vec4<f32>,
+};
+
+@vertex
+fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) p: u32) -> VOut {
+  var out: VOut;
+  let raw = readRaw(p);
+  let full = transformFull(raw);
+  let nt = full[2];
+  if (nt < u.slab.x || nt > u.slab.y) {           // time-slab cull
+    out.pos = vec4<f32>(2.0, 2.0, 2.0, 1.0);
+    out.color = vec4<f32>(0.0);
+    return out;
+  }
+  let pos3 = vec3<f32>(full[0], full[1], nt);
+  let base = screenOf(pos3);
+  let ds = u.params.w;
+  let CAP = 64.0;
+
+  var lo = vec2<f32>(0.0, 0.0);
+  var hi = vec2<f32>(0.0, 0.0);
+
+  let W = u32(u.grid.x);
+  let H = u32(u.grid.y);
+  let WH = u32(u.grid.z);
+  let F = u32(u.grid.w);
+  if (u.flags.w == 1u) {                           // dense: reach to grid neighbours
+    let x = p % W;
+    let rem = (p - x) / W;
+    let y = rem % H;
+    let f = (rem - y) / H;
+    if (W > 1u) {
+      var n: u32; var sg: f32;
+      if (x < W - 1u) { n = p + 1u; sg = 1.0; } else { n = p - 1u; sg = -1.0; }
+      let d = (screenOf(transformPos(readRaw(n))) - base) * ds * sg;
+      lo = min(lo, d); hi = max(hi, d);
+    }
+    if (H > 1u) {
+      var n: u32; var sg: f32;
+      if (y < H - 1u) { n = p + W; sg = 1.0; } else { n = p - W; sg = -1.0; }
+      let d = (screenOf(transformPos(readRaw(n))) - base) * ds * sg;
+      lo = min(lo, d); hi = max(hi, d);
+    }
+    if (F > 1u) {
+      var n: u32; var sg: f32;
+      if (f < F - 1u) { n = p + WH; sg = 1.0; } else { n = p - WH; sg = -1.0; }
+      let d = (screenOf(transformPos(readRaw(n))) - base) * ds * sg;
+      lo = min(lo, d); hi = max(hi, d);
+    }
+  } else {                                         // sparse: matrix box via unit steps
+    let sInv = u.screen.z;
+    let dtwStep = u.screen.w;
+    var rx = raw; rx[0] = rx[0] + sInv;
+    var ry = raw; ry[1] = ry[1] + sInv;
+    var rt = raw; rt[2] = rt[2] + dtwStep;
+    let dx = (screenOf(transformPos(rx)) - base) * ds;
+    let dy = (screenOf(transformPos(ry)) - base) * ds;
+    let dt = (screenOf(transformPos(rt)) - base) * ds;
+    let z = vec2<f32>(0.0, 0.0);
+    lo = min(z, dx) + min(z, dy) + min(z, dt);
+    hi = max(z, dx) + max(z, dy) + max(z, dt);
+  }
+  lo = max(lo, vec2<f32>(-CAP, -CAP));
+  hi = min(hi, vec2<f32>(CAP + 1.0, CAP + 1.0));
+  hi = max(hi, lo + vec2<f32>(1.0, 1.0));
+
+  let corner = vec2<f32>(f32(vi & 1u), f32((vi >> 1u) & 1u));
+  let off = mix(lo, hi, corner);
+  let sp = base + off;
+  let clipX = sp.x / u.screen.x * 2.0 - 1.0;
+  let clipY = 1.0 - sp.y / u.screen.y * 2.0;
+  let vz = viewRot(pos3).z;
+  let depth = clamp(0.5 - vz * 0.4, 0.0, 1.0);
+  out.pos = vec4<f32>(clipX, clipY, depth, 1.0);
+  out.color = vec4<f32>(computeColor(full), 1.0);
+  return out;
+}
+
+@fragment
+fn fs(in: VOut) -> @location(0) vec4<f32> {
+  return in.color;
+}
+`;
+
+async function initWebGPU() {
+  if (!gpu.supported) { updateRendererIndicator(); return; }
+  try {
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+    if (!adapter) throw new Error('no WebGPU adapter');
+    const lim = adapter.limits;
+    const device = await adapter.requestDevice({
+      requiredLimits: {
+        maxStorageBufferBindingSize: lim.maxStorageBufferBindingSize,
+        maxBufferSize: lim.maxBufferSize,
+      }
+    });
+    device.lost.then((info) => {
+      console.warn('WebGPU device lost:', info && info.message);
+      gpu.ready = false; setGpuActive(false);
+    });
+    const canvasEl = document.getElementById('gpuCanvas');
+    const ctxg = canvasEl.getContext('webgpu');
+    const format = navigator.gpu.getPreferredCanvasFormat();
+    ctxg.configure({ device, format, alphaMode: 'opaque' });
+
+    const module = device.createShaderModule({ code: GPU_WGSL });
+    gpu.pipeline = device.createRenderPipeline({
+      layout: 'auto',
+      vertex:   { module, entryPoint: 'vs' },
+      fragment: { module, entryPoint: 'fs', targets: [{ format }] },
+      primitive: { topology: 'triangle-strip' },
+      depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
+    });
+    gpu.uniformBuf = device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    gpu.matrixBuf  = device.createBuffer({ size: 36 * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+
+    gpu.device = device; gpu.ctx = ctxg; gpu.format = format;
+    gpu.bufferLimit = Math.min(lim.maxStorageBufferBindingSize, lim.maxBufferSize);
+    gpu.ready = true;
+    updateRendererIndicator();
+    gpuMaybeActivate();
+  } catch (e) {
+    console.warn('WebGPU unavailable, using CPU renderer:', e);
+    gpu.supported = false; gpu.ready = false;
+    updateRendererIndicator();
+  }
+}
+
+// GPU point buffer this cloud needs = numPoints × N floats.
+function gpuBytesForCount(count) { return count * N * 4; }
+
+// Decide whether the GPU can drive the current cloud, and upload it if so.
+function gpuMaybeActivate() {
+  if (!gpu.ready || !pointsChunks || numPoints === 0) { setGpuActive(false); return; }
+  if (gpuBytesForCount(numPoints) > gpu.bufferLimit) { setGpuActive(false); return; }
+  try { gpuUploadPoints(); setGpuActive(true); }
+  catch (e) { console.warn('GPU point upload failed, using CPU:', e); setGpuActive(false); }
+}
+
+// (Re)allocate + fill the GPU point buffer from the chunked CPU cloud. Chunks are
+// contiguous slices of the global point order, so writing them back-to-back
+// reconstructs one contiguous buffer the shader indexes as p·N.
+function gpuUploadPoints() {
+  const d = gpu.device;
+  const bytes = gpuBytesForCount(numPoints);
+  if (!gpu.pointBuf || gpu.pointBufPoints !== numPoints || gpu.pointBufN !== N) {
+    if (gpu.pointBuf) gpu.pointBuf.destroy();
+    gpu.pointBuf = d.createBuffer({ size: Math.max(16, bytes), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    gpu.pointBufPoints = numPoints; gpu.pointBufN = N;
+    gpu.bindGroup = null;
+  }
+  let offset = 0;
+  for (let ci = 0; ci < numChunks; ci++) {
+    const arr = pointsChunks[ci];
+    d.queue.writeBuffer(gpu.pointBuf, offset, arr);
+    offset += arr.byteLength;
+  }
+  gpu.uploadedFor = numPoints;
+  if (!gpu.bindGroup) {
+    gpu.bindGroup = d.createBindGroup({
+      layout: gpu.pipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: gpu.uniformBuf } },
+        { binding: 1, resource: { buffer: gpu.pointBuf } },
+        { binding: 2, resource: { buffer: gpu.matrixBuf } },
+      ],
+    });
+  }
+}
+
+function setGpuActive(on) {
+  const was = gpu.active;
+  gpu.active = !!on;
+  const gc = document.getElementById('gpuCanvas');
+  if (gc) gc.style.display = gpu.active ? 'block' : 'none';
+  // In GPU mode only the WebGPU canvas may be composited: hide the 2D #canvas so
+  // it isn't a second, overlapping canvas layer (which makes Chrome's compositor
+  // intermittently drop the WebGPU layer — blank cloud, dashed outline still
+  // visible). The dashed frame-bounds lives in #gpuFrameBounds (DOM) instead.
+  // #canvas keeps its bitmap while hidden, so CPU render/export still read it.
+  canvas.style.display = gpu.active ? 'none' : 'block';
+  if (!gpu.active) gpuFrameBounds.style.display = 'none';
+  if (gpu.active || was) needsRender = true;
+  updateRendererIndicator();
+}
+
+// Info-bar renderer status: plainly reports which renderer is drawing the live
+// view. GPU when the WebGPU path is active, CPU otherwise (no WebGPU, or the
+// cloud didn't fit a single GPU buffer, or a GPU failure fell back). Called
+// whenever the active renderer can change — including right after a load
+// allocates the cloud (via setGpuActive from gpuMaybeActivate).
+function updateRendererIndicator() {
+  const el = document.getElementById('infoRenderer');
+  if (!el) return;
+  const onGpu = gpu.active;
+  el.textContent = onGpu ? 'GPU' : 'CPU';
+  el.classList.toggle('gpu', onGpu);
+}
+
+// Position the dashed frame-bounds outline + update the time readout for GPU
+// mode. The outline is a DOM element (not drawn on the 2D canvas) so #canvas can
+// stay hidden while the GPU renders — a stacked transparent canvas over the
+// WebGPU canvas makes Chrome's compositor intermittently drop the WebGPU layer.
+// #canvas fills #mainArea (inset:0), so canvas pixels map 1:1 to mainArea px.
+function drawGpuOverlay(cw, ch, displayScale, tView) {
+  const maxDim = Math.max(imgW, imgH);
+  const halfBW = (imgW / (2 * maxDim)) * displayScale;
+  const halfBH = (imgH / (2 * maxDim)) * displayScale;
+  const el = gpuFrameBounds;
+  el.style.display = 'block';
+  el.style.left   = (cw / 2 - halfBW) + 'px';
+  el.style.top    = (ch / 2 - halfBH) + 'px';
+  el.style.width  = (halfBW * 2) + 'px';
+  el.style.height = (halfBH * 2) + 'px';
+  timeReadout.textContent = 't = ' + tView.toFixed(3);
+}
+
+// Returns true if it drew the frame; false to fall back to the CPU renderer.
+function renderGPU() {
+  const d = gpu.device;
+  if (!d || !gpu.pipeline || !gpu.pointBuf) return false;
+  const cw = canvas.width, ch = canvas.height;
+  if (cw === 0 || ch === 0) return true;
+  try {
+    if (gpu.uploadedFor !== numPoints) gpuUploadPoints();
+
+    const M = buildRotationMatrix(angles);
+    rotMatrix = M;                       // keep for CPU export parity
+    const mArr = new Float32Array(36);
+    for (let i = 0; i < N * N; i++) mArr[i] = M[i];
+    d.queue.writeBuffer(gpu.matrixBuf, 0, mArr);
+
+    const displayScale = Math.max(imgW, imgH) * zoomLevel;
+    const cx = cw / 2, cy = ch / 2;
+    const frameSpacing = numFrames > 1 ? timeWeight / (numFrames - 1) : 1e9;
+    const slabHalf = timeThick * frameSpacing * 0.5;
+    // Sweep the play slab across the cloud's populated rotated-time range, not the
+    // fixed ±0.5·timeWeight. Under a rotation that mixes time with x/y/colour the
+    // slab's populated span shifts and its ends thin out, so a fixed sweep would
+    // fade the frame to a near-blank for part of each loop. Refresh the range only
+    // when the inputs (including slab width via timeThick) change; use a strided
+    // sample while spinning/dragging so a live animation stays cheap, and a full
+    // pass when settled (matches CPU/export).
+    const trKey = angles.join(',') + '|' + timeWeight + '|' + colorWeight + '|' + timeThick + '|' + numPoints;
+    if (trKey !== gpu.trKey) {
+      const stride = (animating || interacting)
+        ? Math.max(1, Math.ceil(numPoints / PREVIEW_BUDGET)) : 1;
+      const [trMin, trMax] = computeTimeRange(M, stride);
+      gpu.trMin = trMin; gpu.trMax = trMax;
+      // Only cache (skip future recompute) for the settled full-pass result;
+      // during a strided preview keep recomputing so it refines as it spins.
+      gpu.trKey = stride === 1 ? trKey : '';
+    }
+    const tView = gpu.trMin + playPhase * (gpu.trMax - gpu.trMin);
+    const winLo = tView - slabHalf, winHi = tView + slabHalf;
+    const W = imgW, H = imgH, WH = W * H;
+    const dense = (numPoints === numFrames * WH) ? 1 : 0;
+    const sInv = 1 / Math.max(W, H);
+    const dtwStep = numFrames > 1 ? 1 / (numFrames - 1) : 0;
+    const VM = viewIsIdentity() ? [1, 0, 0, 0, 1, 0, 0, 0, 1] : buildViewMatrix(viewAngles);
+
+    const ub = new ArrayBuffer(128);
+    const f = new Float32Array(ub);
+    const u32 = new Uint32Array(ub);
+    f[0] = VM[0]; f[1] = VM[1]; f[2] = VM[2];
+    f[4] = VM[3]; f[5] = VM[4]; f[6] = VM[5];
+    f[8] = VM[6]; f[9] = VM[7]; f[10] = VM[8];
+    f[12] = displayScale; f[13] = cx; f[14] = cy; f[15] = dotScale;
+    f[16] = winLo; f[17] = winHi; f[18] = timeWeight; f[19] = colorWeight;
+    f[20] = cw; f[21] = ch; f[22] = sInv; f[23] = dtwStep;
+    f[24] = W; f[25] = H; f[26] = WH; f[27] = numFrames;
+    u32[28] = N;
+    u32[29] = (colorSpace === 'hsv') ? 1 : (colorSpace === 'hsl') ? 2 : (colorSpace === 'mono') ? 3 : 0;
+    u32[30] = clipMode;
+    u32[31] = dense;
+    d.queue.writeBuffer(gpu.uniformBuf, 0, ub);
+
+    if (!gpu.depthTex || gpu.depthW !== cw || gpu.depthH !== ch) {
+      if (gpu.depthTex) gpu.depthTex.destroy();
+      gpu.depthTex = d.createTexture({ size: [cw, ch], format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT });
+      gpu.depthW = cw; gpu.depthH = ch;
+    }
+
+    const enc = d.createCommandEncoder();
+    const view = gpu.ctx.getCurrentTexture().createView();
+    const pass = enc.beginRenderPass({
+      colorAttachments: [{
+        view,
+        clearValue: { r: 1 / 255, g: 4 / 255, b: 9 / 255, a: 1 },
+        loadOp: 'clear', storeOp: 'store',
+      }],
+      depthStencilAttachment: {
+        view: gpu.depthTex.createView(),
+        depthClearValue: 1.0, depthLoadOp: 'clear', depthStoreOp: 'store',
+      },
+    });
+    pass.setPipeline(gpu.pipeline);
+    pass.setBindGroup(0, gpu.bindGroup);
+    pass.draw(4, numPoints);
+    pass.end();
+    d.queue.submit([enc.finish()]);
+
+    drawGpuOverlay(cw, ch, displayScale, tView);
+    // Clip % can't be counted in a vertex shader (no atomics), so show a neutral
+    // dash — the renderer indicator in the info bar already reports GPU mode.
+    const clipEl = document.getElementById('infoClip');
+    clipEl.textContent = '— clip';
+    clipEl.classList.add('zero');
+
+    return true;
+  } catch (e) {
+    console.warn('renderGPU error, falling back to CPU:', e);
+    return false;
+  }
+}
+
+// ============================================================
+// Canvas sizing
+// ============================================================
+function resizeCanvas() {
+  const rect = mainArea.getBoundingClientRect();
+  const w = Math.floor(rect.width), h = Math.floor(rect.height);
+  canvas.width  = w;
+  canvas.height = h;
+  canvas.style.width  = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  const gc = document.getElementById('gpuCanvas');
+  if (gc) {
+    gc.width = w; gc.height = h;
+    gc.style.width = rect.width + 'px';
+    gc.style.height = rect.height + 'px';
+  }
+  needsRender = true;
+}
+
+// ============================================================
+// UI: build rotation slider rows
+// ============================================================
+function buildSliders() {
+  const container = document.getElementById('groupRotations');
+  container.innerHTML = '';
+  sliderEls.length = 0;
+  sliderValEls.length = 0;
+
+  for (let p = 0; p < PLANES.length; p++) {
+    const row = document.createElement('div');
+    row.className = 'slider-row';
+
+    const lbl = document.createElement('label');
+    lbl.innerHTML = PLANE_LABELS[p];
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = -180; slider.max = 180; slider.value = 0; slider.step = 1;
+    if (PLANE_HAS_TIME[p]) slider.classList.add('has-time');
+
+    const val = document.createElement('span');
+    val.className = 'val';
+    val.textContent = '0\u00B0';
+
+    row.appendChild(lbl);
+    row.appendChild(slider);
+    row.appendChild(val);
+    container.appendChild(row);
+
+    sliderEls.push(slider);
+    sliderValEls.push(val);
+
+    onInputChange(slider, () => {
+      const deg = snapSlider(slider, 0, 0.012);
+      angles[p] = deg * Math.PI / 180;
+      val.textContent = deg + '\u00B0';
+      needsRotate = true;
+      saveSettings();
+    });
+
+    slider.addEventListener('dblclick', () => {
+      slider.value = 0;
+      angles[p] = 0;
+      val.textContent = '0\u00B0';
+      needsRotate = true;
+      saveSettings();
+    });
+  }
+}
+
+function updateSlidersFromAngles() {
+  for (let p = 0; p < PLANES.length; p++) {
+    const deg = Math.round(angles[p] * 180 / Math.PI);
+    sliderEls[p].value = deg;
+    sliderValEls[p].textContent = deg + '\u00B0';
+  }
+}
+
+// View-orbit sliders: tumble the rendered 3D result on screen (X-Y roll, X-Z yaw,
+// Y-Z pitch) without re-rotating the 6D cloud. Works in both GPU and CPU renderers.
+function setupViewSliders() {
+  const specs = [
+    ['viewXY', 'viewXYVal', 0],
+    ['viewXZ', 'viewXZVal', 1],
+    ['viewYZ', 'viewYZVal', 2],
+  ];
+  for (const [sid, vid, idx] of specs) {
+    const slider = document.getElementById(sid);
+    const val = document.getElementById(vid);
+    if (!slider || !val) continue;
+    const apply = (deg) => {
+      viewAngles[idx] = deg * Math.PI / 180;
+      val.innerHTML = deg + '&deg;';
+      needsRender = true;
+    };
+    onInputChange(slider, () => {
+      const deg = snapSlider(slider, 0, 0.012);
+      apply(deg);
+    });
+    slider.addEventListener('dblclick', () => {
+      slider.value = 0;
+      apply(0);
+    });
+  }
+}
+
+// ============================================================
+// Magnetic snap: if a slider lands within `frac` of its range from
+// `target`, pull it exactly onto `target`. Returns the (snapped) value.
+// ============================================================
+function snapSlider(slider, target, frac) {
+  const min = parseFloat(slider.min), max = parseFloat(slider.max);
+  const thresh = (max - min) * frac;
+  let v = parseFloat(slider.value);
+  if (Math.abs(v - target) <= thresh) { v = target; slider.value = String(target); }
+  return v;
+}
+
+// Run a handler on both `input` (live drag) AND `change` (release). Magnetic
+// snapping done only in `input` can be undone when the browser re-commits the
+// pointer value on release and fires `change`, so we re-apply the same handler
+// there to guarantee the final resting value is snapped.
+// 'input' fires continuously while dragging (→ interacting: downsampled preview);
+// 'change' fires once on release (→ not interacting: full-quality final pass).
+// Harmless for render-only sliders, since the stride only matters when a handler
+// also sets needsRotate.
+function onInputChange(slider, fn) {
+  slider.addEventListener('input',  (e) => { interacting = true;  fn(e); });
+  slider.addEventListener('change', (e) => { interacting = false; fn(e); });
+}
+
+// ============================================================
+// UI: settings sliders
+// ============================================================
+function setupSettings() {
+  // Safety net: if a slider's 'change' is ever missed (pointer released off the
+  // control), still drop out of preview mode and schedule a full-quality pass.
+  window.addEventListener('pointerup', () => {
+    if (interacting) { interacting = false; if (previewStride > 1) needsRotate = true; }
+  });
+
+  const dotScaleSlider = document.getElementById('dotScale');
+  const zoomSlider     = document.getElementById('zoom');
+
+  onInputChange(dotScaleSlider, () => {
+    dotScale = snapSlider(dotScaleSlider, 1, 0.02);
+    document.getElementById('dotScaleVal').textContent = dotScale.toFixed(2);
+    needsRender = true;
+    saveSettings();
+  });
+
+  onInputChange(zoomSlider, () => {
+    zoomLevel = snapSlider(zoomSlider, 1, 0.02);
+    document.getElementById('zoomVal').textContent = zoomLevel.toFixed(2);
+    needsRender = true;
+    saveSettings();
+  });
+
+  // Resolution: label tracks the drag; the (heavy) re-derive + re-extract
+  // happens on release so dragging stays responsive.
+  const resolutionSlider = document.getElementById('resolution');
+  const resolutionValEl  = document.getElementById('resolutionVal');
+  resolutionSlider.addEventListener('input', () => {
+    resolutionValEl.textContent = resolutionSlider.value;
+    updateMemDisplay();
+  });
+  resolutionSlider.addEventListener('change', async () => {
+    const v = parseInt(resolutionSlider.value, 10);
+    if (v === resolutionCap) return;
+    resolutionCap = v;
+    resolutionValEl.textContent = String(v);
+    saveSettings();
+    if (!sourceMaster) return;
+    clearInfoError();   // drop any stale OOM message
+    loadingOverlay.classList.add('show');
+    loadingOverlay.textContent = 'resampling…';
+    // Let the overlay paint before the synchronous re-extract.
+    await new Promise(r => requestAnimationFrame(r));
+    try {
+      deriveWorkingSource();
+      extractPoints(sourceVideo);
+      syncFramesSlider();
+    } finally {
+      loadingOverlay.classList.remove('show');
+    }
+  });
+
+  // Frames: label tracks the drag; the heavy re-sample happens on release.
+  const framesSlider = document.getElementById('frames');
+  const framesValEl  = document.getElementById('framesVal');
+  framesSlider.addEventListener('input', () => {
+    framesValEl.textContent = framesSlider.value;   // dragging shows the number
+    updateMemDisplay();
+  });
+  framesSlider.addEventListener('change', () => {
+    applyFrameCount(parseInt(framesSlider.value, 10));
+  });
+  // "All frames" checkbox toggles All-frames mode.
+  document.getElementById('framesAllChk').addEventListener('change', (e) => {
+    setFramesAll(e.target.checked);
+    updateMemDisplay();
+  });
+
+  // Click the memory readout to switch between MB/GB and an exact byte count.
+  document.getElementById('memVal').addEventListener('click', () => {
+    memRaw = !memRaw;
+    updateMemDisplay();
+    saveSettings();
+  });
+
+  const colorWeightSlider = document.getElementById('colorWeight');
+  onInputChange(colorWeightSlider, () => {
+    colorWeight = snapSlider(colorWeightSlider, 1, 0.02);
+    document.getElementById('colorWeightVal').textContent = colorWeight.toFixed(2);
+    needsRotate = true;
+    saveSettings();
+  });
+
+  const timeWeightSlider = document.getElementById('timeWeight');
+  onInputChange(timeWeightSlider, () => {
+    timeWeight = snapSlider(timeWeightSlider, 1, 0.02);
+    document.getElementById('timeWeightVal').textContent = timeWeight.toFixed(2);
+    needsRotate = true;   // time extent is baked pre-rotation
+    saveSettings();
+  });
+
+  const timeThickSlider = document.getElementById('timeThick');
+  onInputChange(timeThickSlider, () => {
+    timeThick = snapSlider(timeThickSlider, 1, 0.02);
+    document.getElementById('timeThickVal').textContent = timeThick.toFixed(1);
+    needsRender = true;   // gating only, no re-rotate
+    saveSettings();
+  });
+
+  // Clip mode toggle
+  const clipBtns = document.querySelectorAll('#clipOptions .toggle-btn');
+  clipBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      clipBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      clipMode = parseInt(btn.dataset.mode);
+      needsRotate = true;
+      saveSettings();
+    });
+  });
+
+  // Color space toggle
+  const csBtns = document.querySelectorAll('#colorSpaceOptions .toggle-btn');
+  csBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.cs === colorSpace) return;
+      csBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      colorSpace = btn.dataset.cs;
+      applyColorSpace();
+      updateMemDisplay();
+      saveSettings();
+    });
+  });
+}
+
+// ============================================================
+// UI: playback controls
+// ============================================================
+function setupPlayback() {
+  const btnPlay = document.getElementById('btnPlay');
+  btnPlay.addEventListener('click', () => {
+    playing = !playing;
+    btnPlay.classList.toggle('active', playing);
+    btnPlay.innerHTML = playing ? '&#10073;&#10073; Pause time' : '&#9654; Play time';
+  });
+
+  const speedSlider = document.getElementById('playSpeed');
+  speedSlider.addEventListener('input', () => {
+    playSpeed = parseFloat(speedSlider.value);
+    document.getElementById('playSpeedVal').textContent = playSpeed.toFixed(2);
+    saveSettings();
+  });
+
+  const scrub = document.getElementById('timeScrub');
+  scrub.addEventListener('input', () => {
+    playPhase = parseFloat(scrub.value);
+    document.getElementById('timeScrubVal').textContent = playPhase.toFixed(2);
+    needsRender = true;
+  });
+}
+
+function updateScrubFromPhase() {
+  const scrub = document.getElementById('timeScrub');
+  scrub.value = playPhase;
+  document.getElementById('timeScrubVal').textContent = playPhase.toFixed(2);
+}
+
+// ============================================================
+// Color space switching
+// ============================================================
+function applyColorSpace() {
+  // Rebuild dimension config (may change N and the number of rotation planes)
+  configureDims();
+  buildSliders();
+  updateSlidersFromAngles();
+
+  const sub = document.getElementById('subtitle');
+  sub.textContent =
+    colorSpace === 'mono' ? 'every pixel is a 4D voxel: (x, y, t, L)'
+    : colorSpace === 'hsv' ? 'every pixel is a 6D voxel: (x, y, t, H, S, V)'
+    : colorSpace === 'hsl' ? 'every pixel is a 6D voxel: (x, y, t, H, S, L)'
+    : 'every pixel is a 6D voxel: (x, y, t, R, G, B)';
+
+  // Re-extract from source frames in the new color space
+  if (sourceVideo) extractPoints(sourceVideo);
+  needsRotate = true;
+  needsRender = true;
+}
+
+// ============================================================
+// UI: buttons
+// ============================================================
+function setupButtons() {
+  document.getElementById('btnReset').addEventListener('click', () => {
+    angles.fill(0);
+    updateSlidersFromAngles();
+    needsRotate = true;
+    saveSettings();
+  });
+
+  const btnAnim = document.getElementById('btnAnimate');
+  btnAnim.addEventListener('click', () => {
+    animating = !animating;
+    btnAnim.classList.toggle('active', animating);
+    btnAnim.textContent = animating ? 'Stop' : 'Spin';
+    if (animating) randomizeSpeeds();
+    else needsRotate = true;   // spin stopped → one full-quality pass at rest
+  });
+
+  document.getElementById('btnRandomize').addEventListener('click', () => {
+    for (let i = 0; i < PLANES.length; i++) {
+      angles[i] = (Math.random() - 0.5) * 2 * Math.PI;
+    }
+    updateSlidersFromAngles();
+    needsRotate = true;
+    saveSettings();
+  });
+
+  document.getElementById('btnExport').addEventListener('click', () => {
+    // Export reads the 2D canvas via renderCPU, which needs the CPU rotation cache.
+    // In GPU mode that cache is never built during the session, so force a full pass.
+    computeRotation(); needsRotate = false;
+    render();
+    const link = document.createElement('a');
+    link.download = '6d-rotation.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+
+  document.getElementById('btnExportVideo').addEventListener('click', exportVideo);
+}
+
+// ============================================================
+// Export the time sweep as a video. Prefers WebCodecs (VideoEncoder) muxed into
+// a tiny self-contained MP4 — that path is faster-than-realtime and frame-exact
+// — and falls back to MediaRecorder (real-time WebM/MP4) where WebCodecs H.264
+// isn't available. No external libraries either way. Records one full loop of
+// the time axis (playPhase 0→1) at the same speed the preview plays (from
+// Speed), plus rotation tumble if Spin is on.
+// ============================================================
+
+// Output frame count: one time-sweep matched to the on-screen Speed
+// (sweeps/sec), clamped so the clip is neither trivial nor absurd.
+function exportFrameCount(fps) {
+  const sweepSeconds = Math.min(60, Math.max(1, 1 / Math.max(0.02, playSpeed)));
+  return Math.max(30, Math.min(1800, Math.round(fps * sweepSeconds)));
+}
+
+// Render output frame i into the main canvas (advance time, and rotation if
+// Spin is on). Shared by both export paths.
+function renderExportFrame(i, nFrames) {
+  playPhase = i / nFrames;                 // 0 → 1 (exclusive) for a clean loop
+  if (animating) {
+    for (let k = 0; k < PLANES.length; k++) {
+      angles[k] += animSpeeds[k];
+      if (angles[k] > Math.PI)  angles[k] -= 2 * Math.PI;
+      if (angles[k] < -Math.PI) angles[k] += 2 * Math.PI;
+    }
+    computeRotation();
+  }
+  render();
+}
+
+async function exportVideo() {
+  if (exporting) return;
+  if (!pointsChunks || numPoints === 0) return;
+  const canWC = (typeof VideoEncoder !== 'undefined') && (typeof VideoFrame !== 'undefined');
+  if (canWC) {
+    const ok = await exportVideoWC();      // fast, frame-exact MP4
+    if (ok) return;
+  }
+  await exportVideoMR();                    // real-time fallback
+}
+
+// ---- WebCodecs path: encode H.264 and mux into MP4 ------------------------
+async function pickH264Config(W, H, fps, bitrate) {
+  const codecs = ['avc1.640028', 'avc1.4d0028', 'avc1.42E01E', 'avc1.42001f'];
+  for (const codec of codecs) {
+    const cfg = { codec, width: W, height: H, bitrate, framerate: fps,
+                  latencyMode: 'realtime', avc: { format: 'avc' } };
+    try {
+      const s = await VideoEncoder.isConfigSupported(cfg);
+      if (s && s.supported) return cfg;
+    } catch (e) { /* try next codec */ }
+  }
+  return null;
+}
+
+// Returns true when it produced and downloaded a file; false to fall back.
+async function exportVideoWC() {
+  const btn = document.getElementById('btnExportVideo');
+  const fps = 30;
+  const nFrames = exportFrameCount(fps);
+  const W = canvas.width & ~1, H = canvas.height & ~1;   // H.264 wants even dims
+  if (W < 2 || H < 2) return false;
+  const bitrate = Math.max(4000000, Math.min(80000000, Math.round(W * H * fps * 0.12)));
+  const cfg = await pickH264Config(W, H, fps, bitrate);
+  if (!cfg) return false;
+
+  exporting = true;
+  btn.disabled = true;
+  const savedPhase = playPhase, savedPlaying = playing;
+  playing = false;
+  // GPU mode never builds the CPU rotation cache — force a full pass for export.
+  computeRotation(); needsRotate = false;
+
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  const tctx = tmp.getContext('2d');
+
+  const chunks = [];
+  let desc = null, encErr = null;
+  const encoder = new VideoEncoder({
+    output: (chunk, meta) => {
+      if (meta && meta.decoderConfig && meta.decoderConfig.description && !desc)
+        desc = new Uint8Array(meta.decoderConfig.description);   // the avcC record
+      const d = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(d);
+      chunks.push({ data: d, key: chunk.type === 'key' });
+    },
+    error: e => { encErr = e; }
+  });
+
+  loadingOverlay.classList.add('show');
+  const frameDurUs = Math.round(1e6 / fps);
+  try {
+    encoder.configure(cfg);
+    for (let i = 0; i < nFrames && !encErr; i++) {
+      renderExportFrame(i, nFrames);
+      tctx.drawImage(canvas, 0, 0, W, H);
+      const vf = new VideoFrame(tmp, { timestamp: i * frameDurUs, duration: frameDurUs });
+      encoder.encode(vf, { keyFrame: (i % 60 === 0) });
+      vf.close();
+      // Backpressure: don't outrun the encoder's queue.
+      while (encoder.encodeQueueSize > 10 && !encErr) await new Promise(r => setTimeout(r));
+      if ((i & 15) === 0) {
+        loadingOverlay.textContent = `encoding video… ${i + 1}/${nFrames}`;
+        await new Promise(r => requestAnimationFrame(r));
+      }
+    }
+    if (!encErr) await encoder.flush();
+  } catch (e) {
+    encErr = e;
+  } finally {
+    try { encoder.close(); } catch (e) {}
+    loadingOverlay.classList.remove('show');
+    exporting = false;
+    btn.disabled = false;
+    playPhase = savedPhase;
+    playing = savedPlaying;
+    if (animating) updateSlidersFromAngles();
+    needsRotate = true;
+    needsRender = true;
+  }
+
+  if (encErr || !chunks.length || !desc) return false;   // let caller fall back
+  const timescale = 90000, sampleDur = Math.round(timescale / fps);
+  downloadBlob(buildMp4(chunks, W, H, timescale, sampleDur, desc), '6d-rotation.mp4');
+  return true;
+}
+
+// ---- Minimal MP4 (ISO-BMFF) muxer for H.264 — no dependencies -------------
+function mp4Str(s) { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 0xff; return a; }
+function mp4U16(n) { return new Uint8Array([(n >> 8) & 255, n & 255]); }
+function mp4U32(n) { return new Uint8Array([(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]); }
+function mp4Cat(arrs) { let len = 0; for (const a of arrs) len += a.length; const o = new Uint8Array(len); let p = 0; for (const a of arrs) { o.set(a, p); p += a.length; } return o; }
+function mp4U64(n) { return mp4Cat([mp4U32(Math.floor(n / 4294967296)), mp4U32(n >>> 0)]); }
+function mp4Box(type, ...kids) { const body = mp4Cat(kids); return mp4Cat([mp4U32(body.length + 8), mp4Str(type), body]); }
+function mp4Full(type, version, flags, ...kids) { return mp4Box(type, new Uint8Array([version, (flags >> 16) & 255, (flags >> 8) & 255, flags & 255]), ...kids); }
+
+function buildMp4(chunks, width, height, timescale, sampleDur, avcC) {
+  const nFrames = chunks.length;
+  let totalData = 0; for (const c of chunks) totalData += c.data.length;
+  const duration = nFrames * sampleDur;
+
+  const ftyp = mp4Box('ftyp', mp4Str('isom'), mp4U32(0x200),
+                      mp4Str('isom'), mp4Str('iso2'), mp4Str('avc1'), mp4Str('mp41'));
+  const useLarge = (totalData + 8) > 0xFFFFFFFF;                 // >4 GiB mdat → 64-bit
+  const mdatDataOffset = ftyp.length + (useLarge ? 16 : 8);
+
+  // Sample tables. All samples sit contiguously in one chunk, so stsc is a
+  // single run and co64 holds one 64-bit offset.
+  const stsz = mp4Full('stsz', 0, 0, mp4U32(0), mp4U32(nFrames), mp4Cat(chunks.map(c => mp4U32(c.data.length))));
+  const co64 = mp4Full('co64', 0, 0, mp4U32(1), mp4U64(mdatDataOffset));
+  const stsc = mp4Full('stsc', 0, 0, mp4U32(1), mp4U32(1), mp4U32(nFrames), mp4U32(1));
+  const stts = mp4Full('stts', 0, 0, mp4U32(1), mp4U32(nFrames), mp4U32(sampleDur));
+  const keys = []; for (let i = 0; i < nFrames; i++) if (chunks[i].key) keys.push(mp4U32(i + 1));
+  const stss = mp4Full('stss', 0, 0, mp4U32(keys.length), mp4Cat(keys));
+
+  const avc1 = mp4Box('avc1',
+    new Uint8Array(6), mp4U16(1),                // reserved, data_reference_index
+    new Uint8Array(16),                          // pre_defined + reserved
+    mp4U16(width), mp4U16(height),
+    mp4U32(0x00480000), mp4U32(0x00480000),      // 72 dpi h/v resolution
+    mp4U32(0), mp4U16(1),                        // reserved, frame_count
+    new Uint8Array(32),                          // compressorname
+    mp4U16(0x0018), mp4U16(0xFFFF),              // depth, pre_defined(-1)
+    mp4Box('avcC', avcC));
+  const stsd = mp4Full('stsd', 0, 0, mp4U32(1), avc1);
+  const stbl = mp4Box('stbl', stsd, stts, stss, stsc, stsz, co64);
+
+  const vmhd = mp4Full('vmhd', 0, 1, mp4U16(0), mp4U16(0), mp4U16(0), mp4U16(0));
+  const dinf = mp4Box('dinf', mp4Full('dref', 0, 0, mp4U32(1), mp4Full('url ', 0, 1)));
+  const minf = mp4Box('minf', vmhd, dinf, stbl);
+
+  const hdlr = mp4Full('hdlr', 0, 0, mp4U32(0), mp4Str('vide'), new Uint8Array(12), mp4Str('VideoHandler\0'));
+  const mdhd = mp4Full('mdhd', 0, 0, mp4U32(0), mp4U32(0), mp4U32(timescale), mp4U32(duration), mp4U16(0x55C4), mp4U16(0));
+  const mdia = mp4Box('mdia', mdhd, hdlr, minf);
+
+  const matrix = mp4Cat([mp4U32(0x00010000), mp4U32(0), mp4U32(0),
+                         mp4U32(0), mp4U32(0x00010000), mp4U32(0),
+                         mp4U32(0), mp4U32(0), mp4U32(0x40000000)]);
+  const tkhd = mp4Full('tkhd', 0, 7, mp4U32(0), mp4U32(0), mp4U32(1), mp4U32(0), mp4U32(duration),
+    new Uint8Array(8), mp4U16(0), mp4U16(0), mp4U16(0), mp4U16(0), matrix,
+    mp4U32(width * 65536), mp4U32(height * 65536));
+  const trak = mp4Box('trak', tkhd, mdia);
+
+  const mvhd = mp4Full('mvhd', 0, 0, mp4U32(0), mp4U32(0), mp4U32(timescale), mp4U32(duration),
+    mp4U32(0x00010000), mp4U16(0x0100), mp4U16(0), new Uint8Array(8), matrix,
+    new Uint8Array(24), mp4U32(2));
+  const moov = mp4Box('moov', mvhd, trak);
+
+  const mdatHeader = useLarge
+    ? mp4Cat([mp4U32(1), mp4Str('mdat'), mp4U64(totalData + 16)])
+    : mp4Cat([mp4U32(totalData + 8), mp4Str('mdat')]);
+
+  const parts = [ftyp, mdatHeader];
+  for (const c of chunks) parts.push(c.data);
+  parts.push(moov);
+  return new Blob(parts, { type: 'video/mp4' });
+}
+
+function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = name;
+  link.href = url;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 20000);
+}
+
+// ---- MediaRecorder fallback (real-time) -----------------------------------
+async function exportVideoMR() {
+  const btn = document.getElementById('btnExportVideo');
+  if (typeof MediaRecorder === 'undefined' || !canvas.captureStream) {
+    document.getElementById('imageInfo').innerHTML =
+      `<span style="color:#ff7b72">This browser can't record canvas video.</span>`;
+    return;
+  }
+
+  const candidates = [
+    'video/mp4;codecs=avc1.42E01E', 'video/mp4',
+    'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'
+  ];
+  let mime = '';
+  for (const t of candidates)
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) { mime = t; break; }
+
+  const fps = 30;
+  const nFrames = exportFrameCount(fps);
+
+  exporting = true;
+  btn.disabled = true;
+  const savedPhase = playPhase, savedPlaying = playing;
+  playing = false;
+  // GPU mode never builds the CPU rotation cache — force a full pass for export.
+  computeRotation(); needsRotate = false;
+
+  // Manual-frame capture when supported (deterministic); else auto-rate.
+  let stream = canvas.captureStream(0);
+  let track = stream.getVideoTracks()[0];
+  const manual = track && typeof track.requestFrame === 'function';
+  if (!manual) { stream = canvas.captureStream(fps); track = stream.getVideoTracks()[0]; }
+
+  const bitrate = Math.max(4000000, Math.min(40000000,
+    Math.round(canvas.width * canvas.height * fps * 0.15)));
+  const recOpts = { videoBitsPerSecond: bitrate };
+  if (mime) recOpts.mimeType = mime;
+  let rec;
+  try {
+    rec = new MediaRecorder(stream, recOpts);
+  } catch (e) {
+    exporting = false; btn.disabled = false;
+    document.getElementById('imageInfo').innerHTML =
+      `<span style="color:#ff7b72">Couldn't start the recorder: ${e.message}</span>`;
+    return;
+  }
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  const stopped = new Promise(res => { rec.onstop = res; });
+
+  loadingOverlay.classList.add('show');
+  const frameDur = 1000 / fps;
+  try {
+    rec.start();
+    for (let i = 0; i < nFrames; i++) {
+      renderExportFrame(i, nFrames);
+      if (manual) track.requestFrame();
+      loadingOverlay.textContent = `recording video… ${i + 1}/${nFrames}`;
+      await new Promise(r => setTimeout(r, frameDur));
+    }
+    rec.stop();
+    await stopped;
+  } finally {
+    track && track.stop();
+    loadingOverlay.classList.remove('show');
+    exporting = false;
+    btn.disabled = false;
+    playPhase = savedPhase;
+    playing = savedPlaying;
+    if (animating) updateSlidersFromAngles();
+    needsRotate = true;
+    needsRender = true;
+  }
+
+  if (!chunks.length) {
+    document.getElementById('imageInfo').innerHTML =
+      `<span style="color:#ff7b72">Export produced no data.</span>`;
+    return;
+  }
+  const ext = (mime.indexOf('mp4') >= 0) ? 'mp4' : 'webm';
+  downloadBlob(new Blob(chunks, { type: mime || 'video/webm' }), `6d-rotation.${ext}`);
+}
+
+function randomizeSpeeds() {
+  for (let i = 0; i < PLANES.length; i++) {
+    animSpeeds[i] = (Math.random() - 0.5) * 0.025;
+  }
+}
+
+// ============================================================
+// Video loading & frame extraction
+// ============================================================
+const MAX_DIM_CAP = 128;  // default/demo resolution and the pre-load dialog's seed
+let loadLongSide  = MAX_DIM_CAP; // chosen master long-side for the NEXT decode. Set by
+                          // the pre-load dialog; the video/GIF decoders downsample to
+                          // this instead of a fixed cap, so full native res is reachable.
+let resolutionCap = 100;  // current working resolution (long side, px) — Resolution slider
+let targetFrames = 48;    // frames actually extracted (clamped to the media)
+let framesPref   = 48;    // the user's DESIRED frame count (slider preference).
+                          // Kept separate from targetFrames so a short clip that
+                          // clamps 48→N doesn't leave N stuck as the preference
+                          // when a longer clip is loaded next.
+let framesAll    = false; // "All frames" mode: extract every frame the source has
+const FRAMES_ALL_FALLBACK = 480;  // used when the true count is unknown (video
+                          // whose fps couldn't be measured)
+
+// The loaded media's true frame count, if known: exact for GIFs, estimated
+// (duration × measured fps) for video, else Infinity.
+function mediaTrueFrames() {
+  if (!loadedMedia) return Infinity;
+  if (loadedMedia.kind === 'gif') return loadedMedia.all.total;
+  if (loadedMedia.kind === 'video') return loadedMedia.trueFrames || Infinity;
+  return Infinity;
+}
+
+// Integer ceiling for the Frames slider: the true count, or a generous fallback
+// when it's unknown.
+function framesCeil() {
+  const tf = mediaTrueFrames();
+  return Math.max(2, Math.floor(isFinite(tf) ? tf : FRAMES_ALL_FALLBACK));
+}
+
+// How many frames to actually extract for the current media, given the user's
+// preference / "All" mode. In All mode that's every frame the source has; else
+// it's the user's desired count clamped to what the source can provide.
+function resolveTargetFrames() {
+  const ceil = framesCeil();
+  return framesAll ? ceil : Math.max(2, Math.min(framesPref, ceil));
+}
+
+// ============================================================
+// Live memory estimate for the point-cloud allocation
+// ============================================================
+// The point cloud is four chunked typed arrays sized by the number of visible
+// points (frames × working-width × working-height): points[count·N·4] +
+// rPos[count·3·4] + rCol[count·3] + timeOrder[count·4]. Estimated worst-case
+// (every pixel visible) from the *pending* slider values so it updates live
+// while dragging.
+// Worst-case point-cloud bytes for a source of native size (w, h) downsampled so
+// its long side is `longSide`, at `frames` frames, in the current color space.
+function estimateBytesFor(w, h, longSide, frames) {
+  const scale = Math.min(1, longSide / Math.max(w, h));
+  const sw = Math.max(1, Math.round(w * scale));
+  const sh = Math.max(1, Math.round(h * scale));
+  const Nloc = (colorSpace === 'mono') ? 4 : 6;   // 3 spatial-time + color channels
+  const bytesPerPoint = Nloc * 4 + 12 + 3 + 4;    // points + rPos + rCol + timeOrder
+  return frames * sw * sh * bytesPerPoint;
+}
+
+// Pre-flight memory probe: try to allocate every chunk the point cloud will
+// need (worst case: all pixels opaque) without touching the live cloud globals.
+// If it succeeds the arrays are released and we return true — the real alloc in
+// extractPoints will succeed too (barring an intervening allocation). If it
+// throws OOM we record oomFloor and return false, so the caller can bail before
+// spending time on the heavy frame decode.
+function probeCloudMemory(w, h, longSide, frames) {
+  const scale = Math.min(1, longSide / Math.max(w, h));
+  const sw = Math.max(1, Math.round(w * scale));
+  const sh = Math.max(1, Math.round(h * scale));
+  const count = frames * sw * sh;
+  if (count === 0) return true;
+  const Nloc = (colorSpace === 'mono') ? 4 : 6;
+
+  // Chunking math (local — doesn't touch ppcBits/numChunks globals)
+  const strideBytes = Nloc * 4;
+  let bits = 0;
+  while (bits < 30 && (((1 << (bits + 1)) >>> 0) * strideBytes) <= MAX_CHUNK_BYTES) bits++;
+  const ppc = 1 << bits;
+  const nc = ((count - 1) >>> bits) + 1;
+
+  const allChunks = [];
+  try {
+    for (let ci = 0; ci < nc; ci++) {
+      const lc = Math.min(ppc, count - ci * ppc);
+      allChunks.push(new Float32Array(lc * Nloc));   // points
+      allChunks.push(new Float32Array(lc * 3));      // rPos
+      allChunks.push(new Uint8Array(lc * 3));        // rCol
+      allChunks.push(new Uint32Array(lc));           // timeOrder
+    }
+  } catch (err) {
+    const needed = estimateBytesFor(w, h, longSide, frames);
+    if (needed < oomFloor) oomFloor = needed;
+    return false;
+  }
+  // Success — let the GC reclaim
+  allChunks.length = 0;
+  return true;
+}
+
+function estimateCloudBytes() {
+  const resSlider = document.getElementById('resolution');
+  const frmSlider = document.getElementById('frames');
+  const resLong = (resSlider ? parseInt(resSlider.value, 10) : resolutionCap) || resolutionCap;
+  let F;
+  if (framesAll) F = framesCeil();
+  else F = (frmSlider ? parseInt(frmSlider.value, 10) : targetFrames) || targetFrames;
+
+  const mw = sourceMaster ? sourceMaster.w : MAX_DIM_CAP;
+  const mh = sourceMaster ? sourceMaster.h : MAX_DIM_CAP;
+  return estimateBytesFor(mw, mh, resLong, F);
+}
+
+function formatBytes(n) {
+  if (memRaw) return n.toLocaleString('en-US') + ' B';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0, v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  const dp = (i === 0) ? 0 : (v < 10 ? 2 : (v < 100 ? 1 : 0));
+  return v.toFixed(dp) + ' ' + u[i];
+}
+
+function updateMemDisplay() {
+  const el = document.getElementById('memVal');
+  if (!el) return;
+  const bytes = estimateCloudBytes();
+  el.textContent = formatBytes(bytes);
+  // Red when the estimate meets or exceeds a size that previously OOM'd.
+  el.classList.toggle('mem-warn', oomFloor < Infinity && bytes >= oomFloor);
+}
+
+// Seek the <video> to time t and resolve once the frame is ready. Robust against
+// stalls: a seek that never fires 'seeked' (a bad/duplicate frame, a decode
+// hiccup, or a target equal to the current time) would otherwise hang the whole
+// extraction forever, so we always resolve — on 'seeked', on 'error', or after a
+// timeout — and never leave the promise pending.
+function seekTo(video, t, timeoutMs = 1500) {
+  return new Promise(resolve => {
+    let done = false;
+    let timer = 0;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      video.removeEventListener('seeked', finish);
+      video.removeEventListener('error', finish);
+      clearTimeout(timer);
+      resolve();
+    };
+    video.addEventListener('seeked', finish);
+    video.addEventListener('error', finish);
+    timer = setTimeout(finish, timeoutMs);
+    try {
+      if (Math.abs(video.currentTime - t) < 1e-4) {
+        // Already at (essentially) this time — 'seeked' may not fire. Resolve async.
+        setTimeout(finish, 0);
+      } else {
+        video.currentTime = t;
+      }
+    } catch (e) { finish(); }
+  });
+}
+
+async function extractVideoFrames(video) {
+  let vw = video.videoWidth, vh = video.videoHeight;
+  const scale = Math.min(1, loadLongSide / Math.max(vw, vh));
+  const sw = Math.max(1, Math.round(vw * scale));
+  const sh = Math.max(1, Math.round(vh * scale));
+
+  let dur = video.duration;
+  if (!isFinite(dur) || dur <= 0) dur = 1;
+
+  const off = document.createElement('canvas');
+  off.width = sw; off.height = sh;
+  const c = off.getContext('2d', { willReadFrequently: true });
+
+  const F = targetFrames;
+  const frames = [];
+  let lastImg = null;
+  let ceiling = false;   // hit the clip's seekable end — seeks no longer advance
+  for (let i = 0; i < F; i++) {
+    const t = Math.min(dur - 1e-3, dur * ((i + 0.5) / F));
+    if (!ceiling) {
+      const before = video.currentTime;
+      await seekTo(video, t);
+      c.drawImage(video, 0, 0, sw, sh);
+      lastImg = c.getImageData(0, 0, sw, sh);
+      // If a seek couldn't move past where we already were even though a later
+      // time was requested, we've reached the seekable ceiling (common near the
+      // end of webm/VP9). Stop seeking and reuse the last frame for the rest —
+      // otherwise every remaining frame stalls on the full seek timeout.
+      if (i > 0 && Math.abs(video.currentTime - before) < 1e-4 && video.currentTime < t - 1e-4) {
+        ceiling = true;
+      }
+    }
+    frames.push(lastImg);
+    loadingOverlay.textContent = `extracting frames… ${i + 1}/${F}`;
+  }
+  return { frames, w: sw, h: sh, F };
+}
+
+// Route a picked/dropped file to the right decoder.
+function isAcceptedFile(file) {
+  return !!file && (file.type.startsWith('video/') || file.type === 'image/gif');
+}
+
+// Drop a stale error message (e.g. out-of-memory from a previous clip) so it
+// doesn't linger while new work runs, but leave a good "Loaded: …" line intact.
+function clearInfoError() {
+  const el = document.getElementById('imageInfo');
+  if (el.querySelector('.info-err')) el.innerHTML = '';
+}
+
+function handleFile(file) {
+  if (!file) return;
+  clearInfoError();
+  if (file.type === 'image/gif') loadGifFile(file);
+  else if (file.type.startsWith('video/')) loadVideoFile(file);
+}
+
+// ── Pre-load resolution / frames selection dialog ─────────────────────
+// Shown after a clip's native size + frame count are known but before the
+// (potentially large) decode. Returns { resolution, frames } on Load, or null
+// on Cancel. `meta` = { title, w, h, nativeFrames }; nativeFrames may be
+// non-finite when a video's fps couldn't be measured.
+let loadModalOpen = false;
+function showLoadModal(meta) {
+  return new Promise(resolve => {
+    const modal   = document.getElementById('loadModal');
+    const titleEl = document.getElementById('loadModalTitle');
+    const nativeEl= document.getElementById('loadNative');
+    const resRange= document.getElementById('loadResRange');
+    const resNum  = document.getElementById('loadResNum');
+    const frRange = document.getElementById('loadFramesRange');
+    const frNum   = document.getElementById('loadFramesNum');
+    const memVal  = document.getElementById('loadMemVal');
+    const okBtn   = document.getElementById('loadConfirmBtn');
+    const cancelBtn = document.getElementById('loadCancelBtn');
+
+    const nativeLong  = Math.max(1, Math.max(meta.w, meta.h));
+    const framesKnown = isFinite(meta.nativeFrames);
+    const nativeFrames= framesKnown ? Math.max(2, Math.round(meta.nativeFrames)) : FRAMES_ALL_FALLBACK;
+
+    titleEl.textContent = meta.title;
+    nativeEl.innerHTML = `Native: ${meta.w}&times;${meta.h}` +
+      (framesKnown ? `, ${nativeFrames} frames` : `, frame count unknown`);
+
+    const resMin = Math.min(24, nativeLong);
+    const clampRes = v => Math.max(resMin, Math.min(nativeLong, Math.round(v) || resMin));
+    const clampFr  = v => Math.max(2, Math.min(nativeFrames, Math.round(v) || 2));
+
+    const resSeed = clampRes(Math.min(nativeLong, resolutionCap || MAX_DIM_CAP));
+    const frSeed  = clampFr(Math.min(nativeFrames, framesPref || 48));
+
+    resRange.min = String(resMin); resRange.max = String(nativeLong);
+    resNum.min   = String(resMin); resNum.max   = String(nativeLong);
+    frRange.min  = '2'; frRange.max = String(nativeFrames);
+    frNum.min    = '2'; frNum.max   = String(nativeFrames);
+    resRange.value = resNum.value = String(resSeed);
+    frRange.value  = frNum.value  = String(frSeed);
+
+    const memRow = document.getElementById('loadMemRow');
+    const refreshMem = () => {
+      const R = clampRes(parseInt(resNum.value, 10));
+      const F = clampFr(parseInt(frNum.value, 10));
+      const bytes = estimateBytesFor(meta.w, meta.h, R, F);
+      memVal.textContent = formatBytes(bytes);
+      memRow.classList.toggle('warn', oomFloor < Infinity && bytes >= oomFloor);
+      // Clear the inline error when the user adjusts sliders
+      const errEl = document.getElementById('loadError');
+      if (errEl && bytes < oomFloor) { errEl.style.display = 'none'; errEl.textContent = ''; }
+    };
+    // Dragging a range mirrors into its number box. Typing in a number box only
+    // refreshes the live estimate (and nudges the range) while editing — the
+    // hard clamp/write-back waits for `change` (blur/Enter) so partial values
+    // like "3" on the way to "300" aren't snapped to the minimum mid-keystroke.
+    const onResRange  = () => { resNum.value = resRange.value; refreshMem(); };
+    const onResInput  = () => { const v = clampRes(parseInt(resNum.value, 10)); resRange.value = String(v); refreshMem(); };
+    const onResChange = () => { const v = clampRes(parseInt(resNum.value, 10)); resNum.value = String(v); resRange.value = String(v); refreshMem(); };
+    const onFrRange   = () => { frNum.value = frRange.value; refreshMem(); };
+    const onFrInput   = () => { const v = clampFr(parseInt(frNum.value, 10)); frRange.value = String(v); refreshMem(); };
+    const onFrChange  = () => { const v = clampFr(parseInt(frNum.value, 10)); frNum.value = String(v); frRange.value = String(v); refreshMem(); };
+    // Click the estimate to switch between MB/GB and an exact byte count — shared
+    // with the sidebar readout via the global memRaw flag.
+    const onMemClick = () => { memRaw = !memRaw; refreshMem(); updateMemDisplay(); saveSettings(); };
+    const onKey = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    };
+
+    const errorEl = document.getElementById('loadError');
+
+    function finish(ok) {
+      if (ok) {
+        // Pre-flight: try to allocate the full point cloud before committing.
+        // If it fails, stay in the dialog so the user can adjust sliders.
+        const R = clampRes(parseInt(resNum.value, 10));
+        const F = clampFr(parseInt(frNum.value, 10));
+        if (!probeCloudMemory(meta.w, meta.h, R, F)) {
+          const needed = estimateBytesFor(meta.w, meta.h, R, F);
+          errorEl.textContent = `Not enough memory (~${formatBytes(needed)}) — reduce Frames or Resolution.`;
+          errorEl.style.display = '';
+          refreshMem();          // update red highlight with new oomFloor
+          updateMemDisplay();
+          return;                // stay in the dialog
+        }
+      }
+      // Clean up and close
+      errorEl.style.display = 'none';
+      errorEl.textContent = '';
+      resRange.removeEventListener('input', onResRange);
+      resNum.removeEventListener('input', onResInput);
+      resNum.removeEventListener('change', onResChange);
+      frRange.removeEventListener('input', onFrRange);
+      frNum.removeEventListener('input', onFrInput);
+      frNum.removeEventListener('change', onFrChange);
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      memVal.removeEventListener('click', onMemClick);
+      document.removeEventListener('keydown', onKey, true);
+      modal.classList.remove('show');
+      loadModalOpen = false;
+      if (!ok) { resolve(null); return; }
+      resolve({ resolution: clampRes(parseInt(resNum.value, 10)),
+                frames:     clampFr(parseInt(frNum.value, 10)) });
+    }
+    const onOk = () => finish(true);
+    const onCancel = () => finish(false);
+
+    resRange.addEventListener('input', onResRange);
+    resNum.addEventListener('input', onResInput);
+    resNum.addEventListener('change', onResChange);
+    frRange.addEventListener('input', onFrRange);
+    frNum.addEventListener('input', onFrInput);
+    frNum.addEventListener('change', onFrChange);
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+    memVal.addEventListener('click', onMemClick);
+    document.addEventListener('keydown', onKey, true);
+
+    refreshMem();
+    loadModalOpen = true;
+    modal.classList.add('show');
+    setTimeout(() => { try { okBtn.focus(); } catch (e) {} }, 0);
+  });
+}
+
+// A reusable downsampler: takes full-res sources (VideoFrame / canvas) or a
+// full-size ImageData and returns a small ImageData whose long side is
+// `loadLongSide` (the resolution chosen in the pre-load dialog).
+function makeDownsampler(fullW, fullH) {
+  const scale = Math.min(1, loadLongSide / Math.max(fullW, fullH));
+  const sw = Math.max(1, Math.round(fullW * scale));
+  const sh = Math.max(1, Math.round(fullH * scale));
+  const small = document.createElement('canvas');
+  small.width = sw; small.height = sh;
+  const sctx = small.getContext('2d', { willReadFrequently: true });
+  let full = null, fctx = null;
+  return {
+    sw, sh,
+    fromSource(src) {          // VideoFrame, ImageBitmap, canvas…
+      sctx.clearRect(0, 0, sw, sh);
+      sctx.drawImage(src, 0, 0, sw, sh);
+      return sctx.getImageData(0, 0, sw, sh);
+    },
+    fromImageData(imgData) {   // full-size ImageData from the JS decoder
+      if (!full) {
+        full = document.createElement('canvas');
+        full.width = fullW; full.height = fullH;
+        fctx = full.getContext('2d');
+      }
+      fctx.putImageData(imgData, 0, 0);
+      sctx.clearRect(0, 0, sw, sh);
+      sctx.drawImage(full, 0, 0, sw, sh);
+      return sctx.getImageData(0, 0, sw, sh);
+    }
+  };
+}
+
+// Evenly subsample an array of frames down to at most targetFrames.
+function subsampleFrames(all) {
+  const total = all.length;
+  if (total <= targetFrames) return all;
+  const out = [];
+  const denom = targetFrames - 1;
+  for (let i = 0; i < targetFrames; i++) out.push(all[Math.round(i * (total - 1) / denom)]);
+  return out;
+}
+
+// ── Animated GIF loading ──────────────────────────────────────────────
+// Fast path: native WebCodecs ImageDecoder (Chrome / Edge / Firefox).
+// Fallback: a self-contained pure-JS GIF decoder so Safari (and anything
+// without ImageDecoder) works too. No external dependencies either way.
+// Cheap metadata probe: dimensions + frame count straight from the GIF block
+// structure, without LZW-decoding any pixels. Feeds the pre-load dialog.
+function probeGifMeta(buf) {
+  try {
+    const s = parseGifStructure(buf);
+    const nFrames = s.frames.filter(f => f.ct).length || s.frames.length;
+    return { w: s.width, h: s.height, frames: Math.max(1, nFrames) };
+  } catch (e) { return null; }
+}
+
+async function loadGifFile(file) {
+  loadingOverlay.classList.add('show');
+  loadingOverlay.textContent = 'analyzing GIF…';
+
+  let buf, meta;
+  try {
+    buf = await file.arrayBuffer();
+    meta = probeGifMeta(buf);
+  } catch (e) { meta = null; }
+  loadingOverlay.classList.remove('show');
+
+  if (!meta) {
+    document.getElementById('imageInfo').innerHTML =
+      `<span style="color:#ff7b72">Failed to read GIF</span>`;
+    return;
+  }
+
+  const choice = await showLoadModal({ title: 'Load GIF', w: meta.w, h: meta.h, nativeFrames: meta.frames });
+  if (!choice) return;   // cancelled — keep the current clip
+
+  loadLongSide = choice.resolution;
+  resolutionCap = choice.resolution;
+  framesPref = choice.frames;
+  framesAll = false;
+
+  loadingOverlay.classList.add('show');
+  loadingOverlay.textContent = 'decoding GIF…';
+  await new Promise(r => requestAnimationFrame(r));
+  try {
+    const all = (typeof ImageDecoder !== 'undefined')
+      ? await decodeGifNative(buf)
+      : await decodeGifJS(buf);
+
+    if (!all.frames.length) throw new Error('no frames decoded');
+
+    releaseLoadedMedia();
+    loadedMedia = { kind: 'gif', all, name: file.name };
+    // Choose the extraction count from the user's preference / All mode, clamped
+    // to the GIF's real frame count.
+    targetFrames = resolveTargetFrames();
+    const frames = subsampleFrames(all.frames);
+    sourceMaster = { frames, w: all.sw, h: all.sh, F: frames.length };
+    syncResolutionSlider();
+    deriveWorkingSource();
+    const ok = extractPoints(sourceVideo);
+    syncFramesSlider();
+    saveSettings();
+    if (ok) document.getElementById('imageInfo').innerHTML =
+      `Loaded: <span>${file.name}</span> (${all.sw}&times;${all.sh}, ` +
+      `${frames.length}/${all.total} frames${all.engine ? ', ' + all.engine : ''})`;
+    if (ok && window.matchMedia('(max-width: 768px)').matches) setMobileView('image');
+  } catch (err) {
+    document.getElementById('imageInfo').innerHTML =
+      `<span style="color:#ff7b72">Failed to decode GIF</span>`;
+    console.error(err);
+  } finally {
+    loadingOverlay.classList.remove('show');
+  }
+}
+
+// Native decode via WebCodecs ImageDecoder (returns fully composited frames).
+async function decodeGifNative(buf) {
+  const decoder = new ImageDecoder({ data: buf, type: 'image/gif' });
+  await decoder.tracks.ready;
+  if (decoder.completed) { await decoder.completed; }
+  const track = decoder.tracks.selectedTrack;
+  const total = Math.max(1, track ? track.frameCount : 1);
+
+  const first = await decoder.decode({ frameIndex: 0 });
+  const ds = makeDownsampler(first.image.displayWidth, first.image.displayHeight);
+  const frames = [ds.fromSource(first.image)];
+  first.image.close();
+
+  for (let i = 1; i < total; i++) {
+    const { image } = await decoder.decode({ frameIndex: i });
+    frames.push(ds.fromSource(image));
+    image.close();
+    loadingOverlay.textContent = `decoding GIF… ${i + 1}/${total}`;
+  }
+  decoder.close();
+  return { frames, sw: ds.sw, sh: ds.sh, total, engine: 'webcodecs' };
+}
+
+// Pure-JS decode: parse the GIF, LZW-decode + composite every frame honoring
+// transparency and disposal methods, downsample each snapshot.
+async function decodeGifJS(buf) {
+  const { width, height, frames } = parseGifStructure(buf);
+  const ds = makeDownsampler(width, height);
+  const canvasBuf = new Uint8ClampedArray(width * height * 4);
+  const fullImageData = new ImageData(canvasBuf, width, height);
+  const out = [];
+  let prevBuf = null;
+
+  for (let fi = 0; fi < frames.length; fi++) {
+    const fr = frames[fi];
+    if (!fr.ct) continue;                       // no color table → skip
+    if (fr.gce.disposal === 3) prevBuf = canvasBuf.slice();
+
+    const indices = lzwDecode(fr.minCodeSize, fr.lzw, fr.iw * fr.ih);
+    const rowMap = fr.interlace ? interlaceMap(fr.ih) : null;
+    const { transparent, transparentIndex } = fr.gce;
+    const ct = fr.ct;
+
+    for (let sr = 0; sr < fr.ih; sr++) {
+      const dr = rowMap ? rowMap[sr] : sr;
+      const dy = fr.top + dr;
+      if (dy < 0 || dy >= height) continue;
+      let di = (dy * width + fr.left) * 4;
+      const si = sr * fr.iw;
+      for (let col = 0; col < fr.iw; col++) {
+        const dx = fr.left + col;
+        const idx = indices[si + col];
+        if (!(transparent && idx === transparentIndex) && dx >= 0 && dx < width) {
+          const ci = idx * 3;
+          canvasBuf[di]     = ct[ci];
+          canvasBuf[di + 1] = ct[ci + 1];
+          canvasBuf[di + 2] = ct[ci + 2];
+          canvasBuf[di + 3] = 255;
+        }
+        di += 4;
+      }
+    }
+
+    out.push(ds.fromImageData(fullImageData));
+
+    // Apply disposal so the NEXT frame starts from the right base.
+    if (fr.gce.disposal === 2) {                // restore to background (transparent)
+      for (let sr = 0; sr < fr.ih; sr++) {
+        const dy = fr.top + sr;
+        if (dy < 0 || dy >= height) continue;
+        let di = (dy * width + fr.left) * 4;
+        for (let col = 0; col < fr.iw; col++) {
+          const dx = fr.left + col;
+          if (dx >= 0 && dx < width) { canvasBuf[di] = canvasBuf[di+1] = canvasBuf[di+2] = canvasBuf[di+3] = 0; }
+          di += 4;
+        }
+      }
+    } else if (fr.gce.disposal === 3 && prevBuf) {
+      canvasBuf.set(prevBuf);
+    }
+
+    loadingOverlay.textContent = `decoding GIF… ${fi + 1}/${frames.length}`;
+    await new Promise(r => setTimeout(r));       // yield so the overlay updates
+  }
+
+  return { frames: out, sw: ds.sw, sh: ds.sh, total: frames.length, engine: 'js' };
+}
+
+// GIF interlace: map storage-order rows → actual image rows.
+function interlaceMap(ih) {
+  const rows = new Int32Array(ih);
+  let n = 0;
+  const passes = [[0, 8], [4, 8], [2, 4], [1, 2]];
+  for (const [start, step] of passes)
+    for (let r = start; r < ih; r += step) rows[n++] = r;
+  return rows;
+}
+
+// Parse GIF blocks (no LZW yet — that's done lazily per frame).
+function parseGifStructure(buf) {
+  const data = new Uint8Array(buf);
+  let p = 0;
+  const u8 = () => data[p++];
+  const u16 = () => { const v = data[p] | (data[p + 1] << 8); p += 2; return v; };
+  const readCT = (size) => { const ct = data.subarray(p, p + size * 3); p += size * 3; return ct; };
+  const readSub = () => {
+    const parts = []; let s, len = 0;
+    while (p < data.length && (s = data[p++]) !== 0) { parts.push(data.subarray(p, p + s)); p += s; len += s; }
+    const o = new Uint8Array(len); let k = 0;
+    for (const c of parts) { o.set(c, k); k += c.length; }
+    return o;
+  };
+  const skipSub = () => { let s; while (p < data.length && (s = data[p++]) !== 0) p += s; };
+
+  if (!(data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46)) throw new Error('Not a GIF');
+  p = 6;
+  const width = u16(), height = u16();
+  const packed = u8();
+  const gctFlag = (packed & 0x80) !== 0;
+  const gctSize = 2 << (packed & 7);
+  u8(); u8();                                    // bg color index, pixel aspect
+  const gct = gctFlag ? readCT(gctSize) : null;
+
+  const frames = [];
+  let gce = { disposal: 0, transparent: false, transparentIndex: 0 };
+  while (p < data.length) {
+    const b = u8();
+    if (b === 0x3B) break;                        // trailer
+    if (b === 0x21) {                             // extension
+      const label = u8();
+      if (label === 0xF9) {                       // graphic control extension
+        u8();                                     // block size (4)
+        const flags = u8();
+        u16();                                    // delay (ignored — we resample time)
+        const tIndex = u8();
+        u8();                                     // block terminator
+        gce = { disposal: (flags >> 2) & 7, transparent: (flags & 1) !== 0, transparentIndex: tIndex };
+      } else { skipSub(); }
+    } else if (b === 0x2C) {                       // image descriptor
+      const left = u16(), top = u16(), iw = u16(), ih = u16();
+      const ip = u8();
+      const lctFlag = (ip & 0x80) !== 0;
+      const interlace = (ip & 0x40) !== 0;
+      const lctSize = 2 << (ip & 7);
+      const ct = lctFlag ? readCT(lctSize) : gct;
+      const minCodeSize = u8();
+      const lzw = readSub();
+      frames.push({ left, top, iw, ih, interlace, ct, minCodeSize, lzw, gce });
+      gce = { disposal: 0, transparent: false, transparentIndex: 0 };
+    } else {
+      break;                                       // unknown block — stop safely
+    }
+  }
+  return { width, height, frames };
+}
+
+// Classic table-based GIF LZW decoder → palette-index array.
+function lzwDecode(minCodeSize, data, pixelCount) {
+  const MAX = 4096;
+  const clearCode = 1 << minCodeSize;
+  const eoiCode = clearCode + 1;
+  const prefix = new Int32Array(MAX);
+  const suffix = new Int32Array(MAX);
+  const stack = new Uint8Array(MAX + 1);
+  const out = new Uint8Array(pixelCount);
+
+  let codeSize = minCodeSize + 1;
+  let codeMask = (1 << codeSize) - 1;
+  let available = clearCode + 2;
+  for (let i = 0; i < clearCode; i++) { prefix[i] = 0; suffix[i] = i; }
+
+  let datum = 0, bits = 0, first = 0, top = 0, oldCode = -1, dpos = 0, outPos = 0;
+
+  while (outPos < pixelCount) {
+    if (top === 0) {
+      if (bits < codeSize) {
+        if (dpos >= data.length) break;
+        datum += data[dpos++] << bits;
+        bits += 8;
+        continue;
+      }
+      let code = datum & codeMask;
+      datum >>= codeSize;
+      bits -= codeSize;
+
+      if (code > available || code === eoiCode) break;
+      if (code === clearCode) {
+        codeSize = minCodeSize + 1;
+        codeMask = (1 << codeSize) - 1;
+        available = clearCode + 2;
+        oldCode = -1;
+        continue;
+      }
+      if (oldCode === -1) {
+        stack[top++] = suffix[code];
+        oldCode = code;
+        first = code;
+        continue;
+      }
+      const inCode = code;
+      if (code === available) {
+        stack[top++] = first;
+        code = oldCode;
+      }
+      while (code > clearCode) {
+        stack[top++] = suffix[code];
+        code = prefix[code];
+      }
+      first = suffix[code] & 0xff;
+      stack[top++] = first;
+
+      if (available < MAX) {
+        prefix[available] = oldCode;
+        suffix[available] = first;
+        available++;
+        if ((available & codeMask) === 0 && available < MAX) {
+          codeSize++;
+          codeMask += available;
+        }
+      }
+      oldCode = inCode;
+    }
+    top--;
+    out[outPos++] = stack[top];
+  }
+  return out;
+}
+
+// Estimate a video's true frame count. HTML5 <video> doesn't expose fps or a
+// frame count, but requestVideoFrameCallback reports each presented frame's
+// mediaTime — so we play muted for a fraction of a second, take the median gap
+// between successive frames (= 1/fps), and multiply by the duration. Returns an
+// integer estimate, or null when it can't be measured (no rVFC / too few
+// samples), in which case callers fall back to the memory-safe cap.
+function estimateVideoFrameCount(video) {
+  return new Promise(resolve => {
+    if (typeof video.requestVideoFrameCallback !== 'function') { resolve(null); return; }
+    const times = [];
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      try { video.pause(); } catch (e) {}
+      try { video.currentTime = 0; } catch (e) {}
+      const deltas = [];
+      for (let i = 1; i < times.length; i++) {
+        const d = times[i] - times[i - 1];
+        if (d > 1e-4) deltas.push(d);
+      }
+      if (!deltas.length) { resolve(null); return; }
+      deltas.sort((a, b) => a - b);
+      const med = deltas[deltas.length >> 1];       // median inter-frame gap
+      const dur = (isFinite(video.duration) && video.duration > 0) ? video.duration : null;
+      if (!(med > 0) || !dur) { resolve(null); return; }
+      resolve(Math.max(2, Math.round(dur / med)));
+    };
+    const onFrame = (now, meta) => {
+      times.push(meta.mediaTime);
+      // Enough samples once we've seen ~16 frames or crossed 0.6s of playback.
+      if (times.length >= 16 || meta.mediaTime > 0.6) { finish(); return; }
+      video.requestVideoFrameCallback(onFrame);
+    };
+    video.muted = true;
+    video.requestVideoFrameCallback(onFrame);
+    video.play().catch(() => finish());
+    setTimeout(finish, 1500);   // safety net if playback never starts
+  });
+}
+
+// Many WebM/MP4 files (notably yt-dlp downloads) ship without a duration in
+// their metadata, so Chrome reports `video.duration === Infinity` until you seek
+// past the end. Without the real duration, frame extraction samples the wrong
+// time range — often drawing blank (transparent) frames, which yields zero
+// points and a blank canvas. Force the browser to compute it by seeking way past
+// the end and waiting for the `durationchange`, then restore currentTime to 0.
+function resolveVideoDuration(video) {
+  return new Promise(resolve => {
+    if (isFinite(video.duration) && video.duration > 0) { resolve(video.duration); return; }
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      video.removeEventListener('durationchange', onDur);
+      const d = (isFinite(video.duration) && video.duration > 0) ? video.duration : 0;
+      try { video.currentTime = 0; } catch (e) {}
+      resolve(d);
+    };
+    const onDur = () => { if (isFinite(video.duration) && video.duration > 0) done(); };
+    video.addEventListener('durationchange', onDur);
+    try { video.currentTime = 1e101; } catch (e) {}   // clamps to real end → durationchange
+    setTimeout(done, 3000);   // safety net
+  });
+}
+
+function loadVideoFile(file) {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement('video');
+  video.muted = true;
+  video.preload = 'auto';
+  video.src = url;
+
+  loadingOverlay.classList.add('show');
+  loadingOverlay.textContent = 'loading video…';
+
+  video.addEventListener('loadedmetadata', async () => {
+    // Phase 1 — probe native size + frame count (no heavy decode yet). Don't
+    // release the current clip until the user actually commits to Load.
+    let est = null;
+    try {
+      loadingOverlay.textContent = 'analyzing video…';
+      await resolveVideoDuration(video);   // fix Infinity-duration WebM/MP4 before sampling
+      est = await estimateVideoFrameCount(video);
+    } catch (err) { est = null; }
+    const nw = video.videoWidth, nh = video.videoHeight;
+    loadingOverlay.classList.remove('show');
+
+    if (!nw || !nh) {
+      document.getElementById('imageInfo').innerHTML =
+        `<span style="color:#ff7b72">Failed to read video</span>`;
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    // Phase 2 — let the user choose resolution + frames before decoding.
+    const choice = await showLoadModal({ title: 'Load video', w: nw, h: nh, nativeFrames: est || Infinity });
+    if (!choice) { URL.revokeObjectURL(url); return; }   // cancelled — keep current clip
+
+    loadLongSide = choice.resolution;
+    resolutionCap = choice.resolution;
+    framesPref = choice.frames;
+    framesAll = false;
+
+    // Phase 3 — decode at the chosen settings.
+    loadingOverlay.classList.add('show');
+    loadingOverlay.textContent = 'extracting frames…';
+    await new Promise(r => requestAnimationFrame(r));
+    try {
+      releaseLoadedMedia();
+      loadedMedia = { kind: 'video', video, url, name: file.name, trueFrames: est || Infinity };
+      targetFrames = resolveTargetFrames();
+      const extracted = await extractVideoFrames(video);
+      sourceMaster = extracted;
+      syncResolutionSlider();
+      deriveWorkingSource();
+      const ok = extractPoints(sourceVideo);
+      syncFramesSlider();
+      saveSettings();
+      if (ok) document.getElementById('imageInfo').innerHTML =
+        `Loaded: <span>${file.name}</span> (${extracted.w}&times;${extracted.h}, ${extracted.F} frames)`;
+      if (ok && window.matchMedia('(max-width: 768px)').matches) setMobileView('image');
+    } catch (err) {
+      document.getElementById('imageInfo').innerHTML =
+        `<span style="color:#ff7b72">Failed to read video</span>`;
+      console.error(err);
+      URL.revokeObjectURL(url);
+    } finally {
+      loadingOverlay.classList.remove('show');
+      // NB: keep the object URL alive on success so the Frames slider can
+      // re-seek the same <video>; it's revoked by releaseLoadedMedia() on the
+      // next load.
+    }
+  }, { once: true });
+
+  video.addEventListener('error', () => {
+    loadingOverlay.classList.remove('show');
+    document.getElementById('imageInfo').innerHTML =
+      `<span style="color:#ff7b72">Could not load this video</span>`;
+    URL.revokeObjectURL(url);
+  }, { once: true });
+}
+
+// Release resources held by the previously loaded media (object URLs, big
+// buffers) before loading something new.
+function releaseLoadedMedia() {
+  if (loadedMedia && loadedMedia.kind === 'video' && loadedMedia.url) {
+    try { URL.revokeObjectURL(loadedMedia.url); } catch (e) {}
+  }
+  loadedMedia = null;
+}
+
+// ============================================================
+// UI: drag & drop
+// ============================================================
+function setupDragDrop() {
+  dropZone.addEventListener('click', () => fileInput.click());
+  document.getElementById('openVideoBtn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) handleFile(fileInput.files[0]);
+  });
+
+  ['dragenter', 'dragover'].forEach(ev => {
+    dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  });
+  ['dragleave', 'drop'].forEach(ev => {
+    dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+  });
+  dropZone.addEventListener('drop', e => {
+    const file = e.dataTransfer.files[0];
+    if (isAcceptedFile(file)) handleFile(file);
+  });
+
+  mainArea.addEventListener('dragover', e => e.preventDefault());
+  mainArea.addEventListener('drop', e => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (isAcceptedFile(file)) handleFile(file);
+  });
+}
+
+// ============================================================
+// Animation / render loop
+// ============================================================
+function tick(now) {
+  requestAnimationFrame(tick);
+
+  // While exporting, the export loop owns playPhase/angles and the canvas —
+  // don't let the live loop advance or redraw over it.
+  if (exporting) { lastTick = now; return; }
+
+  const dt = Math.min(0.1, (now - lastTick) / 1000);
+  lastTick = now;
+
+  // FPS counter
+  frameCount++;
+  if (now - lastFpsTime >= 1000) {
+    document.getElementById('infoFps').textContent = frameCount + ' fps';
+    frameCount = 0;
+    lastFpsTime = now;
+  }
+
+  // Time playback
+  if (playing) {
+    playPhase += playSpeed * dt;
+    playPhase -= Math.floor(playPhase);  // loop 0..1
+    updateScrubFromPhase();
+    needsRender = true;
+  }
+
+  // Rotation spin
+  if (animating) {
+    for (let i = 0; i < PLANES.length; i++) {
+      angles[i] += animSpeeds[i];
+      if (angles[i] > Math.PI)  angles[i] -= 2 * Math.PI;
+      if (angles[i] < -Math.PI) angles[i] += 2 * Math.PI;
+    }
+    updateSlidersFromAngles();
+    needsRotate = true;
+  }
+
+  if (needsRotate) {
+    needsRotate = false;
+    if (gpu.active) {
+      // GPU path transforms the whole cloud in the vertex shader every frame,
+      // so there's no CPU computeRotation to run — just repaint.
+      needsRender = true;
+    } else {
+      // While a slider is being dragged or the spin animation runs, transform only
+      // a strided sample so each frame stays interactive; otherwise (including the
+      // final pass on slider release / spin stop) do the full-quality transform.
+      const stride = (interacting || animating)
+        ? Math.max(1, Math.ceil(numPoints / PREVIEW_BUDGET))
+        : 1;
+      computeRotation(stride);
+      needsRender = true;
+    }
+  }
+
+  if (needsRender) {
+    needsRender = false;
+    render();
+  }
+}
+
+// ============================================================
+// Keyboard shortcuts
+// ============================================================
+function setupKeyboard() {
+  document.addEventListener('keydown', e => {
+    if (loadModalOpen) return;   // the pre-load dialog owns the keyboard while open
+    if (e.target && e.target.tagName === 'INPUT') return;
+    if (e.key === ' ') {
+      e.preventDefault();
+      document.getElementById('btnPlay').click();
+    }
+    if (e.key === 'a' || e.key === 'A') document.getElementById('btnAnimate').click();
+    if (e.key === 'r' || e.key === 'R') document.getElementById('btnReset').click();
+    if (e.key === 'e' || e.key === 'E') document.getElementById('btnExport').click();
+    if (e.key === 'v' || e.key === 'V') document.getElementById('btnExportVideo').click();
+    if (e.key === 'c' || e.key === 'C') {
+      const cycle = ['rgb', 'hsv', 'hsl', 'mono'];
+      const next = cycle[(cycle.indexOf(colorSpace) + 1) % cycle.length];
+      const csBtns = document.querySelectorAll('#colorSpaceOptions .toggle-btn');
+      csBtns.forEach(b => b.classList.toggle('active', b.dataset.cs === next));
+      colorSpace = next;
+      applyColorSpace();
+      updateMemDisplay();
+      saveSettings();
+    }
+  });
+}
+
+// ============================================================
+// Mouse wheel zoom on canvas
+// ============================================================
+function setupWheelZoom() {
+  mainArea.addEventListener('wheel', e => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.05 : 0.05;
+    zoomLevel = Math.max(0.2, Math.min(4, zoomLevel + delta));
+    document.getElementById('zoom').value = zoomLevel;
+    document.getElementById('zoomVal').textContent = zoomLevel.toFixed(2);
+    needsRender = true;
+    saveSettings();
+  }, { passive: false });
+}
+
+// ============================================================
+// Touch: pinch-to-zoom on canvas (mobile)
+// ============================================================
+function setupTouchZoom() {
+  let lastDist = null;
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  const applyZoom = z => {
+    zoomLevel = Math.max(0.2, Math.min(4, z));
+    document.getElementById('zoom').value = zoomLevel;
+    document.getElementById('zoomVal').textContent = zoomLevel.toFixed(2);
+    needsRender = true;
+    saveSettings();
+  };
+
+  mainArea.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) { lastDist = dist(e.touches); }
+  }, { passive: false });
+
+  mainArea.addEventListener('touchmove', e => {
+    if (e.touches.length === 2 && lastDist != null) {
+      e.preventDefault();
+      const d = dist(e.touches);
+      if (lastDist > 0) applyZoom(zoomLevel * (d / lastDist));
+      lastDist = d;
+    }
+  }, { passive: false });
+
+  const endTouch = e => { if (e.touches.length < 2) lastDist = null; };
+  mainArea.addEventListener('touchend', endTouch);
+  mainArea.addEventListener('touchcancel', endTouch);
+}
+
+// ============================================================
+// Mobile view switching
+// ============================================================
+function setMobileView(view) {
+  const image = view === 'image';
+  document.body.classList.toggle('mv-image', image);
+  document.body.classList.toggle('mv-config', !image);
+  viewToggle.innerHTML = image ? 'View config \u2922' : 'View video \u2921';
+  const sb = document.querySelector('.sidebar');
+  if (sb) sb.scrollTop = 0;
+  requestAnimationFrame(resizeCanvas);
+}
+
+// ============================================================
+// Initialization
+// ============================================================
+// ============================================================
+// Settings persistence (localStorage)
+// ============================================================
+// Every user-facing knob is saved so a page reload restores the same setup:
+// the sidebar sliders, color space, OOB mode, Resolution/Frames preference and
+// the "All frames" toggle, plus the current rotation on every plane. Transient
+// state (play/pause, spin, scrub position, the loaded clip) is NOT persisted.
+const SETTINGS_KEY = '6drotate.settings.v1';
+let _saveTimer = null;
+
+function saveSettings() {
+  // Debounced so dragging a slider doesn't hammer localStorage every tick.
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(writeSettings, 300);
+}
+
+function writeSettings() {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      dotScale, zoomLevel, colorWeight, timeWeight, timeThick, playSpeed,
+      clipMode, colorSpace, resolutionCap, framesPref, framesAll, memRaw,
+      angles: Array.from(angles),
+    }));
+  } catch (e) { /* storage unavailable / full / private mode — ignore */ }
+}
+
+function loadSettings() {
+  let s;
+  try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); }
+  catch (e) { s = null; }
+  if (!s || typeof s !== 'object') return;
+  const num = (v, d) => (typeof v === 'number' && isFinite(v)) ? v : d;
+  dotScale     = num(s.dotScale, dotScale);
+  zoomLevel    = num(s.zoomLevel, zoomLevel);
+  colorWeight  = num(s.colorWeight, colorWeight);
+  timeWeight   = num(s.timeWeight, timeWeight);
+  timeThick    = num(s.timeThick, timeThick);
+  playSpeed    = num(s.playSpeed, playSpeed);
+  resolutionCap = num(s.resolutionCap, resolutionCap);
+  framesPref   = num(s.framesPref, framesPref);
+  framesAll    = !!s.framesAll;
+  memRaw       = !!s.memRaw;
+  if (s.clipMode === 0 || s.clipMode === 1 || s.clipMode === 2) clipMode = s.clipMode;
+  if (['rgb', 'hsv', 'hsl', 'mono'].includes(s.colorSpace)) colorSpace = s.colorSpace;
+  if (Array.isArray(s.angles)) {
+    for (let i = 0; i < angles.length && i < s.angles.length; i++) {
+      const a = s.angles[i];
+      if (typeof a === 'number' && isFinite(a)) angles[i] = a;
+    }
+  }
+}
+
+// Push the restored state into the sidebar controls (slider positions, readouts,
+// toggle-button highlights, subtitle). Rotation sliders are handled separately
+// by updateSlidersFromAngles().
+function syncControlsFromState() {
+  const put = (id, val, valId, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.value = String(val);
+    if (valId) { const v = document.getElementById(valId); if (v) v.textContent = txt; }
+  };
+  put('dotScale',    dotScale,    'dotScaleVal',    dotScale.toFixed(2));
+  put('zoom',        zoomLevel,   'zoomVal',        zoomLevel.toFixed(2));
+  put('colorWeight', colorWeight, 'colorWeightVal', colorWeight.toFixed(2));
+  put('timeWeight',  timeWeight,  'timeWeightVal',  timeWeight.toFixed(2));
+  put('timeThick',   timeThick,   'timeThickVal',   timeThick.toFixed(1));
+  put('resolution',  resolutionCap, 'resolutionVal', String(resolutionCap));
+  put('playSpeed',   playSpeed,   'playSpeedVal',   playSpeed.toFixed(2));
+  document.querySelectorAll('#clipOptions .toggle-btn').forEach(b =>
+    b.classList.toggle('active', parseInt(b.dataset.mode) === clipMode));
+  document.querySelectorAll('#colorSpaceOptions .toggle-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.cs === colorSpace));
+  const sub = document.getElementById('subtitle');
+  if (sub) sub.textContent =
+    colorSpace === 'mono' ? 'every pixel is a 4D voxel: (x, y, t, L)'
+    : colorSpace === 'hsv' ? 'every pixel is a 6D voxel: (x, y, t, H, S, V)'
+    : colorSpace === 'hsl' ? 'every pixel is a 6D voxel: (x, y, t, H, S, L)'
+    : 'every pixel is a 6D voxel: (x, y, t, R, G, B)';
+  updateMemDisplay();
+}
+
+function init() {
+  loadSettings();      // restore saved knobs before building UI from them
+  configureDims();
+  buildSliders();
+  setupSettings();
+  setupViewSliders();
+  setupPlayback();
+  setupButtons();
+  setupDragDrop();
+  setupKeyboard();
+  setupWheelZoom();
+  setupTouchZoom();
+
+  // Fire-and-forget WebGPU probe. Everything works without it; when it succeeds
+  // it activates the GPU renderer for clouds that fit the device buffer limit.
+  initWebGPU();
+
+  // Reflect restored settings in the controls (sliders, toggles, rotation).
+  syncControlsFromState();
+  updateSlidersFromAngles();
+
+  resizeCanvas();
+
+  window.addEventListener('resize', resizeCanvas);
+  new ResizeObserver(resizeCanvas).observe(mainArea);
+
+  viewToggle.addEventListener('click', () => {
+    const goImage = !document.body.classList.contains('mv-image');
+    setMobileView(goImage ? 'image' : 'config');
+  });
+  setMobileView('config');
+
+  // Load demo video
+  loadedMedia = { kind: 'demo' };
+  targetFrames = resolveTargetFrames();
+  sourceMaster = generateDemoVideo();
+  syncResolutionSlider();
+  deriveWorkingSource();
+  extractPoints(sourceVideo);
+  syncFramesSlider();
+  document.getElementById('imageInfo').innerHTML =
+    `Demo: <span>orbiting blob</span> (${sourceMaster.w}&times;${sourceMaster.h}, ${sourceMaster.F} frames)`;
+
+  // Auto-play the time axis so the demo is alive on load
+  playing = true;
+  const btnPlay = document.getElementById('btnPlay');
+  btnPlay.classList.add('active');
+  btnPlay.innerHTML = '&#10073;&#10073; Pause time';
+
+  requestAnimationFrame(tick);
+}
+
+init();
+</script>
+</body>
+</html>
